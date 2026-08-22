@@ -91,7 +91,7 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
     callout(
       'scope',
       el('strong', { text: 'What this does not prove. ' }),
-      'That BBS98 falls to collusion is a demonstration; that AFGH does not is only demonstrated for the specific attacks run here. AFGH prove master-secret security by reduction to the discrete logarithm problem in their Theorem 3.1 — this page cannot reproduce a reduction, only show that the obvious attack has no analogue and that the residue is bounded to the capability already delegated.'
+      'That BBS98 falls to collusion is a demonstration; that AFGH does not is only demonstrated for the specific attacks run here. AFGH prove master-secret security by reduction to the discrete logarithm problem — this page cannot reproduce a reduction, only show that the obvious attack has no analogue and that the residue is bounded to the capability already delegated.'
     )
   );
 
