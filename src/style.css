@@ -512,6 +512,10 @@ label {
   min-width: 0;
 }
 
+.ledger-expr .hint {
+  margin-left: 0.6rem;
+}
+
 .tok {
   display: inline-block;
   border: 1px solid var(--border-strong);
@@ -627,6 +631,14 @@ label {
   border-color: var(--warn);
 }
 
+.bytes-breach {
+  border-color: var(--alarm);
+}
+
+.bytes-bounded {
+  border-color: var(--warn);
+}
+
 .field {
   margin: 0 0 0.55rem;
 }
@@ -661,6 +673,19 @@ label {
 }
 
 .tag-diff {
+  background-color: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+
+/* Same arithmetic, opposite meaning: see `byteField` in ui/dom.ts. */
+.tag-breach {
+  background-color: var(--alarm-bg);
+  color: var(--alarm);
+  border: 1px solid var(--alarm);
+}
+
+.tag-bounded {
   background-color: var(--warn-bg);
   color: var(--warn);
   border: 1px solid var(--warn);

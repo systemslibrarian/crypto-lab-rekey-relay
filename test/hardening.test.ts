@@ -184,3 +184,49 @@ describe('the two schemes never share a scalar', () => {
     expect(b.sk).not.toBe(a.a2);
   });
 });
+
+describe('degenerate ciphertext components fail closed rather than throwing', () => {
+  it('BBS98: a crafted c1 that recovers the identity returns null, not an exception', async () => {
+    const alice = bbs98.keygen('Alice');
+    const ct = await bbs98.encrypt(alice, 'x');
+    // c1 = [k]g makes M = c1 − [k]g = O, which has no compressed encoding.
+    const forged = { ...ct, c1: ct.c2.multiply(bls.fields.Fr.inv(alice.sk)) };
+    await expect(bbs98.decrypt(alice, forged)).resolves.toBeNull();
+  });
+
+  it('AFGH: a level-2 alpha of the identity is refused by the decryptor', async () => {
+    const alice = afgh.keygen('Alice');
+    const ct = await afgh.encryptLevel2(afgh.publicKey(alice), 'x');
+    const forged = { ...ct, alpha: ct.alpha.subtract(ct.alpha) };
+    const out = await afgh.decrypt(alice, forged);
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.code).toBe('WRONG_LEVEL');
+    expect(out.detail).toContain('not a well-formed level-2 ciphertext');
+  });
+
+  it('AFGH: a level-2 alpha of the identity is refused by the proxy transform', async () => {
+    const alice = afgh.keygen('Alice');
+    const bob = afgh.keygen('Bob');
+    const ct = await afgh.encryptLevel2(afgh.publicKey(alice), 'x');
+    const forged = { ...ct, alpha: ct.alpha.subtract(ct.alpha) };
+    const out = afgh.reencrypt(forged, afgh.rekeygen(alice, afgh.publicKey(bob)));
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.code).toBe('WRONG_LEVEL');
+    expect(out.detail).toContain('identity point');
+  });
+
+  it('AFGH: a level-1 alpha outside GT is refused before any secret touches it', async () => {
+    const alice = afgh.keygen('Alice');
+    const ct = await afgh.encryptLevel1(afgh.publicKey(alice), 'x', 1);
+    const bytes = gtToBytes(ct.alpha);
+    bytes[0] = (bytes[0] ?? 0) ^ 1;
+    const forged = { ...ct, alpha: bls.fields.Fp12.fromBytes(bytes) as typeof ct.alpha };
+    const out = await afgh.decrypt(alice, forged);
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.code).toBe('WRONG_LEVEL');
+    expect(out.detail).toContain('GT subgroup');
+  });
+});

@@ -156,17 +156,19 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
       replace(
         out,
         arith,
-        byteField('recovered scalar', scalarToHex(r.recovered), r.exact ? 'same' : 'diff'),
-        byteField('Alice’s actual private key a', scalarToHex(alice.sk), r.exact ? 'same' : 'diff'),
+        // `breach`, not `same`: these two matching is the worst outcome on the
+        // page, and a green badge here would read as a pass.
+        byteField('recovered scalar', scalarToHex(r.recovered), r.exact ? 'breach' : 'diff'),
+        byteField('Alice’s actual private key a', scalarToHex(alice.sk), r.exact ? 'breach' : 'diff'),
         byteField(
           '[recovered] · g, recomputed',
           bytesToHex(g1ToBytes(r.recoveredPk)),
-          r.matchesPublicKey ? 'same' : 'diff'
+          r.matchesPublicKey ? 'breach' : 'diff'
         ),
         byteField(
           'Alice’s PUBLISHED public key',
           bytesToHex(g1ToBytes(alice.pk)),
-          r.matchesPublicKey ? 'same' : 'diff'
+          r.matchesPublicKey ? 'breach' : 'diff'
         ),
         verdict(
           r.exact ? 'alarm' : 'pass',
@@ -210,11 +212,12 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
     replace(
       out,
       arith,
-      byteField('recovered weak key', bytesToHex(g2ToBytes(r.weakKey)), r.weakKeyMatches ? 'same' : 'diff'),
+      // `bounded`: a real loss, but not the master secret — amber, not red.
+      byteField('recovered weak key', bytesToHex(g2ToBytes(r.weakKey)), r.weakKeyMatches ? 'bounded' : 'diff'),
       byteField(
         'g2^a1, recomputed from Alice’s secret',
         bytesToHex(g2ToBytes(g2.multiply(alice.a1))),
-        r.weakKeyMatches ? 'same' : 'diff'
+        r.weakKeyMatches ? 'bounded' : 'diff'
       ),
       verdict(
         'caution',
@@ -238,7 +241,7 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
       replace(
         followUp,
         el('h4', { text: 'A message encrypted AFTER the collusion, never sent to the proxy' }),
-        el('div', { class: `bytes ${got === secret ? 'bytes-diff' : ''}`, text: got ?? '(could not decrypt)' }),
+        el('div', { class: `bytes ${got === secret ? 'bytes-breach' : ''}`, text: got ?? '(could not decrypt)' }),
         verdict(
           got === secret ? 'alarm' : 'pass',
           got === secret ? 'Read in full, with no proxy involved' : 'Not readable',
@@ -260,7 +263,7 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
     replace(
       followUp,
       el('h4', { text: 'A level-2 ciphertext, opened with the weak key alone' }),
-      el('div', { class: `bytes ${got === secret ? 'bytes-diff' : ''}`, text: got ?? '(could not decrypt)' }),
+      el('div', { class: `bytes ${got === secret ? 'bytes-bounded' : ''}`, text: got ?? '(could not decrypt)' }),
       verdict(
         'caution',
         got === secret ? 'Opened — and this is the honest half of the story' : 'Not readable',

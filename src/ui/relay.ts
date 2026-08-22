@@ -414,7 +414,7 @@ export function renderRelay(lab: Lab, host: HTMLElement): void {
   host.appendChild(
     callout(
       'scope',
-      el('strong', { text: 'What this does not prove. ' }),
+      el('strong', { text: 'What the round trip does not prove. ' }),
       'A working round trip is a correctness demonstration, not a security proof. It does not show that the proxy could not learn the plaintext by some other route, only that it did not hold it here. The security arguments are in the papers: semantic security under eDBDH for AFGH, and under DDH for the ElGamal structure BBS98 is built on. Neither paper claims CCA2 security, and neither makes any guarantee about deliberately malformed ciphertexts.'
     )
   );

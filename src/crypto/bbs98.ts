@@ -91,9 +91,20 @@ export async function encrypt(
  * which fails the tag. No plaintext is ever returned unauthenticated.
  */
 export async function decrypt(kp: Bbs98KeyPair, ct: Bbs98Ciphertext): Promise<string | null> {
-  const kG = ct.c2.multiply(invScalar(kp.sk));
-  const M = ct.c1.subtract(kG);
-  const dek = await deriveDek(g1ToBytes(M), 'bbs98');
+  let seed: Uint8Array;
+  try {
+    const kG = ct.c2.multiply(invScalar(kp.sk));
+    // A crafted c1 = [k]g makes M the identity, which has no compressed
+    // encoding — @noble refuses to serialize it ("bad point: ZERO"). Nothing on
+    // this page can build such a ciphertext, but "never throw across a module
+    // boundary" is an invariant of this codebase rather than a property of the
+    // inputs it happens to receive, so a degenerate recovery fails closed here
+    // exactly like a wrong key does.
+    seed = g1ToBytes(ct.c1.subtract(kG));
+  } catch {
+    return null;
+  }
+  const dek = await deriveDek(seed, 'bbs98');
   const pt = await open(dek, ct.payload, g1ToBytes(ct.c1));
   return pt === null ? null : utf8.decode(pt);
 }

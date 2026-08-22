@@ -191,7 +191,7 @@ export function renderUndelegate(lab: Lab, host: HTMLElement): void {
       out,
       el('div', {}, [
         el('span', { class: 'field-name', text: 'what the colluders read, after revocation' }),
-        el('div', { class: `bytes ${read === secret ? 'bytes-diff' : 'bytes-same'}`, text: read ?? '(unreadable)' }),
+        el('div', { class: `bytes ${read === secret ? 'bytes-breach' : 'bytes-same'}`, text: read ?? '(unreadable)' }),
       ]),
       read === secret
         ? verdict(

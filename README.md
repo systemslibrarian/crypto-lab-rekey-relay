@@ -158,9 +158,9 @@ The Playwright suites build the site and serve it on port 4699 before running, s
 
 ## Build & Verify
 
-**155 tests, all passing**, and none of them skipped.
+**159 tests, all passing**, and none of them skipped.
 
-**130 unit tests** (`npm test`, Vitest):
+**134 unit tests** (`npm test`, Vitest):
 
 | file | what it holds |
 |---|---|
@@ -168,7 +168,7 @@ The Playwright suites build the site and serve it on port 4699 before running, s
 | `test/vectors.test.ts` | 16 pinned scheme vectors — **not** specification KATs, and labelled as such. BBS98 and AFGH have no standardized vectors anywhere; freezing this implementation's own output would test nothing. These use small hand-checkable scalars, were derived independently of `src/`, and each is re-derived a second way in the test. They exist to catch the two exponents most often mis-copied from the literature: BBS98's `b·a⁻¹` (the reciprocal belongs to the *signature* cryptosystem in the same paper) and AFGH's level-2 exponent `a1` (the `1/a` form belongs to the Second Attempt). |
 | `test/bbs98.test.ts` | 20 tests. Round trips, the exponent ledger recomputed independently of `reencrypt`, the byte-identical message half, the collusion checked against both the scalar and the published public key, bidirectionality, transitivity, unbounded multi-hop, and every fail-closed edge. |
 | `test/afgh.test.ts` | 26 tests. Both encryption levels, both decryption levels, proxy invisibility, the re-encryption landing exactly on `Z^(a1·b2·k)`, unidirectionality, the weak key and what it does and does not open, original access, and all four failure codes. |
-| `test/hardening.test.ts` | 17 tests for the properties the page claims out loud: `a1 ≠ a2` (with the total break shown when they are equal), GT subgroup membership, `rk` verifiability in BBS98 and its absence in AFGH, self-delegation, rogue-key registration, and the public linkability of a re-encryption. |
+| `test/hardening.test.ts` | 21 tests for the properties the page claims out loud: `a1 ≠ a2` (with the total break shown when they are equal), GT subgroup membership, `rk` verifiability in BBS98 and its absence in AFGH, self-delegation, rogue-key registration, the public linkability of a re-encryption, and four degenerate-component cases that must fail closed rather than throw. |
 | `test/proxy.test.ts` | 12 tests. The plaintext-exposure search over everything the proxy handled, with a positive control so the search cannot be vacuous; the delegation graph; revocation and what it fails to revoke. |
 | `test/kem.test.ts` | 8 tests. Domain separation, AAD binding, nonce freshness, tag length, and authenticated-failure behaviour. |
 | `test/group.test.ts` | 17 tests. Rejection sampling, modular inversion, serialization round trips, pairing bilinearity and non-degeneracy. |

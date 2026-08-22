@@ -174,11 +174,26 @@ export async function decrypt(
       return fail('WRONG_LEVEL', `alpha failed GT subgroup validation: ${(e as Error).message}`);
     }
   }
-  const M =
-    ct.level === 2
-      ? gtDiv(ct.beta, gtPow(pair(ct.alpha, g2), kp.a1))
-      : gtDiv(ct.beta, gtPow(ct.alpha, invScalar(ct.component === 1 ? kp.a1 : kp.a2)));
-  const dek = await deriveDek(gtToBytes(M), 'afgh');
+  let seed: Uint8Array;
+  try {
+    const M =
+      ct.level === 2
+        ? gtDiv(ct.beta, gtPow(pair(ct.alpha, g2), kp.a1))
+        : gtDiv(ct.beta, gtPow(ct.alpha, invScalar(ct.component === 1 ? kp.a1 : kp.a2)));
+    seed = gtToBytes(M);
+  } catch (e) {
+    // A crafted level-2 alpha of the identity point makes `pair()` throw
+    // ("pairing is not available for ZERO point"), and a beta outside GT can
+    // make the division degenerate. Neither is reachable from this page — no
+    // control here builds a ciphertext by hand — but the invariant is that no
+    // module here throws across its boundary, so a malformed component is
+    // reported as the shape violation it is rather than crashing the caller.
+    return fail(
+      'WRONG_LEVEL',
+      `this is not a well-formed level-${ct.level} ciphertext: ${(e as Error).message}`
+    );
+  }
+  const dek = await deriveDek(seed, 'afgh');
   const pt = await open(dek, ct.payload, gtToBytes(ct.beta));
   if (pt === null) {
     return fail(
@@ -264,6 +279,14 @@ export function reencrypt(ct: AfghCiphertext, rk: AfghReKey): Outcome<AfghCipher
     return fail(
       'RK_MISMATCH',
       `this ciphertext is addressed to ${ct.holder.label}; the installed key re-encrypts from ${rk.fromLabel}`
+    );
+  }
+  if (ct.alpha.is0()) {
+    // Same reasoning as in `decrypt`: `pair()` refuses the identity point, and
+    // a proxy that crashes on a malformed input is worse than one that refuses.
+    return fail(
+      'WRONG_LEVEL',
+      'alpha is the identity point, so this is not a well-formed level-2 ciphertext and there is nothing to pair'
     );
   }
   return ok({

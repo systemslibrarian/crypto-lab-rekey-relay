@@ -200,11 +200,11 @@ export function renderOneHop(lab: Lab, host: HTMLElement): void {
       el('div', { class: 'grid-2' }, [
         el('div', {}, [
           el('span', { class: 'field-name', text: 'rk(A→B) · rk(B→C), computed by the proxy alone' }),
-          el('div', { class: `bytes ${same ? 'bytes-diff' : ''}`, text: scalarToHex(composed.value.value) }),
+          el('div', { class: `bytes ${same ? 'bytes-breach' : ''}`, text: scalarToHex(composed.value.value) }),
         ]),
         el('div', {}, [
           el('span', { class: 'field-name', text: 'a genuine rk(A→C), which Alice never issued' }),
-          el('div', { class: `bytes ${same ? 'bytes-diff' : ''}`, text: scalarToHex(genuine.value) }),
+          el('div', { class: `bytes ${same ? 'bytes-breach' : ''}`, text: scalarToHex(genuine.value) }),
         ]),
       ]),
       verdict(

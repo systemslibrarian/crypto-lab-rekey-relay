@@ -137,20 +137,35 @@ export function verdict(
   ]);
 }
 
-/** A labelled byte field, with an optional same/changed tag. */
-export function byteField(
-  name: string,
-  hex: string,
-  state?: 'same' | 'diff'
-): HTMLDivElement {
+/**
+ * A labelled byte field with an optional comparison tag.
+ *
+ * The four tones exist because COLOUR TRACKS SYSTEM INTEGRITY, not the raw
+ * comparison result. Two byte strings matching is good news on the Relay tab —
+ * it is the proof the proxy did not touch the message — and it is the worst
+ * news on the page on the Collusion tab, where it means the recovered scalar
+ * IS the delegator's private key. A green badge there would be the exact
+ * inversion this rule exists to prevent, so `breach` and `bounded` say the
+ * same arithmetic in the tone the finding deserves.
+ *
+ *   same     the values match, and that is the correct outcome
+ *   diff     the values differ, and that is the correct outcome
+ *   breach   the values match, and that is a total compromise
+ *   bounded  the values match, and that is a real but limited loss
+ */
+export type ByteFieldTone = 'same' | 'diff' | 'breach' | 'bounded';
+
+const TONE_TAG: Record<ByteFieldTone, string> = {
+  same: 'BYTE-IDENTICAL',
+  diff: 'CHANGED',
+  breach: 'EXACT MATCH',
+  bounded: 'EXACT MATCH',
+};
+
+export function byteField(name: string, hex: string, state?: ByteFieldTone): HTMLDivElement {
   const label = el('span', { class: 'field-name' }, [name]);
   if (state) {
-    label.appendChild(
-      el('span', {
-        class: `tag tag-${state}`,
-        text: state === 'same' ? 'BYTE-IDENTICAL' : 'CHANGED',
-      })
-    );
+    label.appendChild(el('span', { class: `tag tag-${state}`, text: TONE_TAG[state] }));
   }
   return el('div', { class: 'field' }, [
     label,

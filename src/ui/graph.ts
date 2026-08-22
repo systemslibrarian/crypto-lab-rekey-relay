@@ -251,11 +251,11 @@ function linkPanel(l1: string, v1: string, l2: string, v2: string): HTMLElement 
     el('div', { class: 'grid-2' }, [
       el('div', {}, [
         el('span', { class: 'field-name', text: l1 }),
-        el('div', { class: `bytes ${same ? 'bytes-diff' : ''}`, text: v1 }),
+        el('div', { class: `bytes ${same ? 'bytes-bounded' : ''}`, text: v1 }),
       ]),
       el('div', {}, [
         el('span', { class: 'field-name', text: l2 }),
-        el('div', { class: `bytes ${same ? 'bytes-diff' : ''}`, text: v2 }),
+        el('div', { class: `bytes ${same ? 'bytes-bounded' : ''}`, text: v2 }),
       ]),
     ]),
     same
