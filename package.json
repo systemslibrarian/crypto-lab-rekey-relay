@@ -1,0 +1,29 @@
+{
+  "name": "crypto-lab-rekey-relay",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Browser demo of proxy re-encryption: a semi-trusted proxy transforms Alice's ciphertext into Bob's without learning the plaintext — BBS98 (broken by collusion) and AFGH (not) over real BLS12-381 pairings.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:a11y": "playwright test --project=a11y",
+    "test:e2e": "playwright test --project=claims",
+    "test:all": "playwright test"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.1.2",
+    "typescript": "~7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
