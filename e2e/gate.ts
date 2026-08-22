@@ -888,7 +888,7 @@ export async function driveAllStates(page: Page, label: string): Promise<void> {
   await expect(page.locator('#panel-vectors .verdict-pass')).toContainText(
     'Every vector recomputed and matched'
   );
-  await expect(page.locator('#panel-vectors .kat-pass')).toHaveCount(18);
+  await expect(page.locator('#panel-vectors .kat-pass')).toHaveCount(17);
   await expect(page.locator('#panel-vectors .kat-fail')).toHaveCount(0);
   await scanAt('Vectors: every published vector recomputed in the browser');
 

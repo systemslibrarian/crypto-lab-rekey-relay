@@ -17,7 +17,17 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (v === undefined || v === false) continue;
+    if (v === undefined) continue;
+    // ARIA state attributes are STRING enumerations, not HTML boolean
+    // attributes. `aria-pressed=""` is not "pressed" and a missing
+    // `aria-pressed` is not "not pressed" — it removes the toggle semantics
+    // altogether. So aria-* is always stringified, and only real boolean
+    // attributes (hidden, disabled) get the presence/absence treatment.
+    if (k.startsWith('aria-')) {
+      node.setAttribute(k, String(v));
+      continue;
+    }
+    if (v === false) continue;
     if (k === 'class') node.className = String(v);
     else if (k === 'text') node.textContent = String(v);
     else if (k === 'html') throw new Error('innerHTML is not used on this page');
@@ -181,6 +191,20 @@ export function list(cls: string, items: Node[]): HTMLUListElement {
  */
 export function scrollRegion(cls: string, label: string): HTMLDivElement {
   return el('div', { class: cls, tabindex: '0', role: 'region', 'aria-label': label });
+}
+
+/**
+ * A table inside a keyboard-reachable horizontal scroll region.
+ *
+ * `overflow-x: auto` on its own builds a scroller no keyboard user can reach —
+ * axe flags it as `scrollable-region-focusable`, and it is a WCAG 2.1.1
+ * failure whether or not axe is watching. At 380px every table on this page
+ * scrolls, so this is the only correct way to ship one.
+ */
+export function tableWrap(label: string, table: HTMLTableElement): HTMLDivElement {
+  return el('div', { class: 'table-wrap', tabindex: '0', role: 'region', 'aria-label': label }, [
+    table,
+  ]);
 }
 
 export function shortHex(hex: string, head = 16, tail = 8): string {

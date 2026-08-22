@@ -21,6 +21,7 @@ import {
   liveRegion,
   p,
   replace,
+  tableWrap,
   verdict,
 } from './dom';
 import type { Lab } from './lab';
@@ -305,15 +306,16 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
     replace(
       followUp,
       el('h4', { text: 'A level-1 ciphertext addressed to Alice, attacked with everything the colluders have' }),
-      el('div', { class: 'table-wrap' }, [
+      tableWrap(
+        'Scalars tried against a level-1 ciphertext, scrollable',
         el('table', { class: 'guess-table' }, [
           el('caption', { text: 'Every scalar the colluders can form, run through the real level-1 decryptor' }),
           el('thead', {}, [
             el('tr', {}, [el('th', { text: 'scalar tried' }), el('th', { text: 'result' })]),
           ]),
           el('tbody', {}, rows),
-        ]),
-      ]),
+        ])
+      ),
       verdict(
         'pass',
         'Alice’s private mail is untouched',
@@ -337,7 +339,8 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
       )
     );
     c.appendChild(
-      el('div', { class: 'table-wrap' }, [
+      tableWrap(
+        'BBS98 and AFGH compared, scrollable',
         el('table', {}, [
           el('caption', {
             text: 'Side by side. Rows marked "shown here" are demonstrated by the buttons above, not asserted.',
@@ -359,8 +362,8 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
             trow('what survives — shown here', 'nothing', 'the master secret a1, and every level-1 ciphertext'),
             trow('revocation', 'none', 'none in this construction — see the Un-delegate tab'),
           ]),
-        ]),
-      ])
+        ])
+      )
     );
     c.appendChild(
       details(

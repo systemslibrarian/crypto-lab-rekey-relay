@@ -13,6 +13,7 @@ import {
   list,
   p,
   replace,
+  tableWrap,
   verdict,
 } from './dom';
 import { CAST, type Actor, type Lab } from './lab';
@@ -126,21 +127,27 @@ export function renderGraph(lab: Lab, host: HTMLElement): void {
     const live = edges.filter((e) => !e.revoked);
     const nodes = CAST.filter((n) => edges.some((e) => e.from === n || e.to === n));
 
-    const nodeList = list(
-      'nodes',
-      nodes.map((n) =>
-        el('span', {
-          class: `node ${live.some((e) => e.from === n) ? 'node-src' : live.some((e) => e.to === n) ? 'node-dst' : ''}`.trim(),
-          text: n,
-        })
-      )
-    );
+    // An empty `role="list"` fails axe's `aria-required-children`, so the
+    // no-edges case renders a sentence instead of an empty list.
+    const nodeList =
+      nodes.length === 0
+        ? p('Nobody is on the graph yet — install a delegation above.', 'hint')
+        : list(
+            'nodes',
+            nodes.map((n) =>
+              el('span', {
+                class: `node ${live.some((e) => e.from === n) ? 'node-src' : live.some((e) => e.to === n) ? 'node-dst' : ''}`.trim(),
+                text: n,
+              })
+            )
+          );
 
-    const edgeList = list(
-      'edges',
+    const edgeList =
       edges.length === 0
-        ? [el('span', { class: 'hint', text: 'No delegations installed yet.' })]
-        : edges.map((e) =>
+        ? p('No delegations installed yet.', 'hint')
+        : list(
+            'edges',
+            edges.map((e) =>
             el('span', { class: `edge ${e.revoked ? 'edge-revoked' : ''}`.trim() }, [
               el('span', { text: e.from }),
               el('span', { class: 'edge-arrow', text: '→' }),
@@ -150,8 +157,8 @@ export function renderGraph(lab: Lab, host: HTMLElement): void {
                 text: `installed at t${e.installedAt} · ${e.uses} transform${e.uses === 1 ? '' : 's'}${e.revoked ? ' · REVOKED' : ''}`,
               }),
             ])
-          )
-    );
+            )
+          );
 
     replace(graphBox, el('h4', { text: 'Nodes' }), nodeList, el('h4', { text: 'Issued edges' }), edgeList);
 
@@ -160,7 +167,8 @@ export function renderGraph(lab: Lab, host: HTMLElement): void {
       const extra = closure.filter(([f, t]) => !live.some((e) => e.from === f && e.to === t));
       graphBox.appendChild(el('h4', { text: 'What the proxy can actually do' }));
       graphBox.appendChild(
-        el('div', { class: 'table-wrap' }, [
+        tableWrap(
+          'Delegations the proxy can perform, scrollable',
           el('table', {}, [
             el('caption', {
               text: 'BBS98 re-encryption keys multiply. Rows marked "composed" were never issued by anyone.',
@@ -187,8 +195,8 @@ export function renderGraph(lab: Lab, host: HTMLElement): void {
                 ])
               )
             ),
-          ]),
-        ])
+          ])
+        )
       );
       if (extra.length > 0) {
         graphBox.appendChild(

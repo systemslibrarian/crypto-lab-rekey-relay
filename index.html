@@ -92,7 +92,12 @@
         gap: 0.4rem;
         padding: 0.5rem 0.85rem;
         border-radius: 10px;
-        border: 1px solid color-mix(in srgb, var(--accent, #35d6bb) 38%, transparent);
+        /* WCAG 1.4.11. The button has no fill, so this border IS the whole
+           control boundary. Mixing the PAGE's --accent ties the ratio to each
+           lab's palette and fails at 2.38:1 here; --cl-ink is already mixed
+           toward the bar's near-white ink, so mixing THAT is accent-independent
+           and clears 3:1 on every lab. */
+        border: 1px solid color-mix(in srgb, var(--cl-ink) 70%, transparent);
         background: transparent;
         color: var(--cl-ink);
         cursor: pointer;
