@@ -45,12 +45,16 @@ export const NARROW = { width: 380, height: 800 };
  *     control it touches, asserts a real completion signal after each, and
  *     scans after every step, in {dark, light} x {1280, 380}.
  *
- *  4. `violations` IS NOT THE WHOLE ORACLE. See `scan`. The surfaces that carry
- *     this lab's meaning — every `.verdict-*` tone, both `.pill` states, the
- *     `.callout-danger` / `.callout-caveat` warnings, the `.learner-check`
- *     tint and the shared top bar's `color-mix()` ink — are all `color-mix()`
- *     fills axe files under `incomplete` rather than judging. So is an
- *     `aria-label` on a role-less element.
+ *  4. `violations` IS NOT THE WHOLE ORACLE. See `scan`. axe has no rule at all
+ *     for non-text contrast (WCAG 1.4.11) or reflow (1.4.10), it files every
+ *     contrast decision it declines to make under `incomplete` rather than
+ *     `violations` — which is where the shared top bar's `color-mix()` ink and
+ *     boundary land — and it silently discards an `aria-label` on a role-less
+ *     element. This lab leans on all four: the four `.verdict-*` tones and
+ *     both `.tag-*` labels are the states it exists to show, every control
+ *     boundary is a 1.4.11 subject, and the `.seg` scheme switch and every
+ *     button row carry `role="group"` so their `aria-label` is not thrown
+ *     away.
  *
  *  5. IT HAD NO REFLOW, NON-TEXT-CONTRAST OR GENERATED-CONTENT ORACLE. The old
  *     spec hand-rolled one luminance check over two input selectors, reading
@@ -201,12 +205,13 @@ export async function assertSingleBanner(page: Page): Promise<void> {
 /**
  * List semantics survive their styling.
  *
- * This lab's one list is the Verify Workbench pipeline: `ol.stage-list` styled
- * `list-style: none`, which is exactly the declaration that makes Safari and
- * VoiceOver DROP the list's implicit role. `verifyWorkbench.ts` compensates
- * the documented way — an explicit `role="list"` on the `<ol>` and
- * `role="listitem"` on every `.stage` — so here, unlike most of this fleet, an
- * explicit role on a list is the fix rather than the defect. What is asserted
+ * Every list on this page — the delegation edges, the node pills, the chain
+ * rows, the revocation steps, the proxy journal — is styled `list-style: none`,
+ * which is exactly the declaration that makes Safari and VoiceOver DROP the
+ * list's implicit role. `dom.ts`'s `list()` helper compensates the documented
+ * way, with an explicit `role="list"` on the `<ul>` and `role="listitem"` on
+ * every child, so here, unlike most of this fleet, an explicit role on a list
+ * is the fix rather than the defect. What is asserted
  * is therefore the SHAPE of that fix: any explicit role on a `ul`/`ol` must be
  * `list` (any other value orphans every `<li>` under it), and a `role="list"`
  * must never sit on an empty element, because axe applies
@@ -330,13 +335,14 @@ export async function boot(page: Page, theme: 'dark'): Promise<void> {
 /**
  * Assert the page does not require horizontal scrolling.
  *
- * WCAG 1.4.10 (Reflow, AA). axe has no rule for this at all. This lab's long
- * values are 64-byte hex runs — every `.field-value` and `.eq-derivation`
- * relies on `overflow-wrap: anywhere` instead of a scroll region, and the
- * `.sig-pair` grid collapses to one column at 640px — so the shapes at risk
- * are a new unwrapped `<code>` run or a grid item whose automatic minimum size
- * is the min-content of a 128-char line. At 380px that is precisely what this
- * check exists to catch.
+ * WCAG 1.4.10 (Reflow, AA). axe has no rule for this at all, and this lab
+ * prints the longest values in the fleet: a level-1 AFGH ciphertext is two
+ * 1152-character hex runs. Every `.bytes` pane relies on
+ * `overflow-wrap: anywhere` rather than a scroller, the tables scroll inside
+ * their own labelled regions, and `#app` is `box-sizing: border-box`
+ * throughout — that last one because without it the hero's `width: 100%` plus
+ * padding pushed the document 36px sideways at 380px, which is the failure
+ * this check caught.
  */
 export async function expectNoHorizontalOverflow(page: Page, label: string): Promise<void> {
   const overflow = await page.evaluate(() => {
@@ -585,16 +591,16 @@ export function expectBaselineNotStale(): void {
  *  - `incomplete` — axe's "could not decide" bucket, which never reaches the
  *    violations array. The one rule id allowed to remain incomplete is
  *    `color-contrast`, and only because the next assertion computes those
- *    ratios arithmetically — which matters here because the surfaces carrying
- *    this lab's meaning are `color-mix()` fills axe cannot resolve: every
- *    verdict tone, both pill states, the danger/caveat callouts, the
- *    learner-check tint, the hero aside and the shared bar's ink. Everything
- *    else in that bucket is a real result axe simply could not finish —
- *    including `aria-prohibited-attr`, which is where an `aria-label` on a
- *    role-less element hides. This page leans on getting that right: the
- *    `.seg`, `.radio-row`, `.preset-row` and learner-check option groups all
- *    pair their labels with `role="group"`. Drop any of those roles and the
- *    label is silently discarded.
+ *    ratios arithmetically — which matters here because the shared bar draws
+ *    its ink and its control boundary from `color-mix()` fills axe cannot
+ *    resolve. Everything else in that bucket is a real result axe simply
+ *    could not finish — including `aria-prohibited-attr`, which is where an
+ *    `aria-label` on a role-less element hides, and `aria-required-children`,
+ *    which is where an empty `role="list"` hides. This page leans on both:
+ *    the `.seg` scheme switch and every button row pair their label with
+ *    `role="group"`, and the delegation graph renders a sentence instead of an
+ *    empty list when nothing is installed. Drop either and the finding appears
+ *    only here.
  *  - arithmetic contrast — composite-aware WCAG 1.4.3 over every text node.
  *  - the same walk over `aria-hidden` content with the exemption lifted —
  *    SC 1.4.3 is about what a reader SEES; see `contrast.ts` for what this

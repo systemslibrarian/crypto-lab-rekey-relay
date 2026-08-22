@@ -370,13 +370,13 @@ export async function auditNonText(page: Page, within = 'body *'): Promise<NonTe
     /**
      * Style and geometry are memoised per element for one pass.
      *
-     * A driven pass here walks six tabpanels, and the expensive part is the
-     * BIP-340 vectors panel: nineteen `.kat-item` disclosures, each with a
-     * summary pill and, once opened, five hex fields and a hand-off button —
-     * all siblings re-walking the same ancestors up to `<body>`. Without the
-     * caches the pass re-reads the same computed styles and rects tens of
-     * thousands of times. Nothing mutates the DOM during the pass, so the
-     * cached values cannot go stale.
+     * A driven pass here walks six tabpanels, and the expensive parts are the
+     * Vectors panel — seventeen rows, each with a pill, a name and a hex
+     * pane — and the persistent proxy journal, which grows an entry per
+     * operation across the whole drive. All siblings re-walking the same
+     * ancestors up to `<body>`. Without the caches the pass re-reads the same
+     * computed styles and rects tens of thousands of times. Nothing mutates
+     * the DOM during the pass, so the cached values cannot go stale.
      */
     const styleCache = new Map<Element, CSSStyleDeclaration>();
 

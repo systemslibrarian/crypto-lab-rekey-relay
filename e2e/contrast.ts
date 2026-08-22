@@ -6,27 +6,23 @@ import type { Page } from '@playwright/test';
  * This exists because axe is not a complete contrast oracle. Two classes of
  * text never reach the `violations` array a gate asserts on:
  *
- *  - TEXT OVER A SURFACE AXE DECLINES TO RESOLVE — a `color-mix()` over an
- *    unknown backdrop. Every surface that carries this lab's MEANING is one:
- *    the three verdict tones (`.verdict-pass` / `-fail` / `-alarm`) are
- *    `color-mix(in oklab, tone …%, var(--surface))`, and so are both `.pill`
- *    states, the `.callout-danger` / `.callout-caveat` warnings, the
- *    `.learner-check` tint and the hero aside's accent wash. Those fills hold
- *    every VALID/rejected verdict, the recovered-key alarm, the deliberately-
- *    broken-signer warning and both quick-check answers. The shared top bar
- *    adds a `color-mix(in srgb, ...)` for its ink. A violations-only gate
- *    therefore measured the contrast of almost none of this lab's verdicts.
+ *  - TEXT OVER A SURFACE AXE DECLINES TO RESOLVE. Anything painted over a
+ *    `color-mix()`, a gradient, or a backdrop axe cannot pin down lands in its
+ *    `incomplete` bucket instead. This lab's own palette is deliberately made
+ *    of flat hex tokens rather than mixes, precisely so that most of it IS
+ *    resolvable — but the SHARED TOP BAR is not: `.cl-btn` and `.cl-badge`
+ *    draw their ink and their boundary from
+ *    `color-mix(in srgb, var(--accent) …%, …)`, and that mix is the reason the
+ *    bar's controls had to be fixed here rather than baselined. A
+ *    violations-only gate says nothing about any of it.
  *
  *  - TEXT FADED BY AN ANCESTOR'S `opacity` — axe reads the declared `color`,
- *    which is not the colour that lands on screen. Here that is
- *    `.stage-skipped` at `.8` — declared for the `'skipped'` pipeline status
- *    `verify()`'s type reserves but never currently emits (the pipeline stops
- *    at its first failure), so it is a dead rule the walk measures the day it
- *    renders; the drive asserts its absence so that day is loud — and
- *    `.btn:disabled` at `.5` (exempt as an inactive component, and skipped
- *    below for that reason). The hero subtitle declares `opacity: .85` and is
- *    then overridden back to `1` later in the same stylesheet; the walk
- *    measures whichever wins rather than trusting either declaration.
+ *    which is not the colour that lands on screen. This lab uses opacity for
+ *    muting NOWHERE: every muted tone is a lower-lightness token, because
+ *    opacity muting is invisible to axe and was exactly the defect that put
+ *    the cancelled exponent tokens at 1.8:1 before the gate caught them. The
+ *    walk still models opacity, because the day someone reaches for it is the
+ *    day it needs to be measured rather than trusted.
  *
  * So: walk every element that owns text, composite the real painted result
  * (translucent colours, gradient stops and opacity groups included), and
@@ -49,24 +45,23 @@ import type { Page } from '@playwright/test';
  * Three things beyond that, each of which otherwise makes the helper report a
  * ratio nothing on screen has:
  *
- *  - TEXT SCROLLED OUT OF A CLIPPING ANCESTOR PAINTS NOTHING. This page keeps
- *    itself nearly scroller-free on purpose — long hex wraps through
- *    `overflow-wrap: anywhere` instead of scrolling — so today the only
- *    clippers are the `.seg` toggle's `overflow: hidden` corner trim and the
- *    stylesheet's currently-unused `.table-wrap { overflow-x: auto }`. The
- *    guard stays because content scrolled past a clipper is not dimmed or
- *    partly drawn; it is absent from the frame, and asking what colour it sits
- *    on has no answer. Its rect is outside every ancestor's box, so the walk
- *    would find nothing behind it and fall through to WHITE, inventing a
- *    failure the day `.table-wrap` gets its first tenant.
+ *  - TEXT SCROLLED OUT OF A CLIPPING ANCESTOR PAINTS NOTHING. This lab has two
+ *    live clippers and both hold real content: `.journal`, the proxy's
+ *    scrolling record, and every `.table-wrap`, which scrolls horizontally at
+ *    phone width. Content scrolled past either is not dimmed or partly drawn;
+ *    it is absent from the frame, and asking what colour it sits on has no
+ *    answer. Its rect is outside every ancestor's box, so an unguarded walk
+ *    would find nothing behind it, fall through to WHITE, and invent a
+ *    failure on a journal entry nobody can see.
  *
  *  - TRANSPARENT TEXT PAINTS NOTHING. Anything drawn `color: transparent` lays
  *    no ink down; compositing a zero-alpha foreground returns the backdrop and
  *    reports a fixed 1:1.
  *
  *  - SVG PAINTS IN DOCUMENT ORDER, SO SIBLINGS CAN BE THE BACKGROUND. This lab
- *    renders every exhibit in HTML; its only SVG is the shared header's two
- *    glyph-free `aria-hidden` marks, one of which — the Menu hamburger — is
+ *    renders every exhibit in HTML — the exponent ledger, the delegation
+ *    graph and the byte panes are all real DOM — so its only SVG is the shared
+ *    header's two `aria-hidden` marks, one of which, the Menu hamburger, is
  *    built from stroke-only `<line>` elements. That is exactly the shape the
  *    `FILLED` guard below exists for: SVG's initial `fill` is black and
  *    `getComputedStyle` reports it for stroke-only geometry too, so an
@@ -84,10 +79,14 @@ import type { Page } from '@playwright/test';
  * on this page will arrive without anyone re-reading this file.
  *
  * SECOND, `aria-hidden` text that is still painted — see the `ariaHidden` note
- * below. This page hides only glyphs (✓ ✕ ⚠ ·) that sit beside their own
- * words, but they are painted in the semantic inks on the `color-mix()` tints,
- * so `gate.ts` measures every `aria-hidden` subtree explicitly with that
- * exemption lifted rather than reasoning about which glyphs matter.
+ * below. This lab deliberately paints NO text-bearing `aria-hidden` subtree of
+ * its own: verdict state is carried by a short mono token (OK / ! / X / !!)
+ * that is part of the accessible name rather than a decorative glyph, so there
+ * is nothing here to exempt. The shared top bar's two SVG marks are the only
+ * `aria-hidden` content on the page and they carry no text. `gate.ts` runs the
+ * walk over every `aria-hidden` subtree anyway, with the exemption lifted,
+ * because the first decorative glyph anyone adds will arrive without their
+ * having read this paragraph.
  */
 
 export interface ContrastFailure {
@@ -111,11 +110,11 @@ export interface ContrastFailure {
  * The second form exists because of a real gap. SC 1.4.3 is about what a reader
  * SEES, and `aria-hidden` changes only what a reader HEARS, so painted text
  * inside an `aria-hidden` subtree still has to clear its ratio — yet axe skips
- * it and, by default, so does this walk. What this page hides is its
- * verdict/stage/pill glyphs (✓ ✕ ⚠ ·), each painted in a semantic ink
- * (`--ok-text`, `--bad-text`, `--alarm-text`) on its own `color-mix()` tint —
- * the states this lab exists to show — so `scan()` calls this a second time as
- * `auditContrast(page, '[aria-hidden="true"], [aria-hidden="true"] *', true)`.
+ * it and, by default, so does this walk. This lab currently hides no text that
+ * way, which is a property of today's markup rather than of the page, so
+ * `scan()` calls this a second time as
+ * `auditContrast(page, '[aria-hidden="true"], [aria-hidden="true"] *', true)`
+ * and the assertion is what keeps it true.
  */
 export async function auditContrast(
   page: Page,
@@ -136,9 +135,10 @@ export async function auditContrast(
     /**
      * Resolve ANY CSS colour to straight-alpha sRGB via a 1×1 canvas.
      *
-     * A hand-rolled `rgba()` regex is not enough here: nearly every tinted
-     * hero aside is authored with `color-mix()`, and Chromium reports that to
-     * `getComputedStyle` unchanged rather than converting it to sRGB. A
+     * A hand-rolled `rgba()` regex is not enough here: the shared top bar
+     * authors its ink and its control boundary with `color-mix()`, and
+     * Chromium reports that to `getComputedStyle` unchanged rather than
+     * converting it to sRGB. A
      * regex that only understands `rgb()/rgba()` sees `null` for every one of
      * them and the walk then falls through to the wrong backdrop — which
      * fabricates failures (dark-on-light read as dark-on-dark) and, far worse,
@@ -414,14 +414,14 @@ export async function auditContrast(
     /**
      * Style and geometry are memoised per element for one pass.
      *
-     * A driven pass here walks a six-panel document, and the expensive part is
-     * the BIP-340 vectors panel: nineteen `.kat-item` disclosures, each
-     * holding five `.field` label/value pairs of 64-byte hex, plus the
-     * three-step trace and both-sides comparison the Sign panel renders on
-     * every signature — all of them siblings re-walking the same ancestors up
-     * to `<body>`. Without the caches the pass re-reads the same computed
-     * styles and rects tens of thousands of times. Nothing mutates the DOM
-     * during the pass, so the cached values cannot go stale.
+     * A driven pass here walks a six-panel document, and the expensive parts
+     * are the persistent proxy journal — which accumulates an entry per
+     * operation, each listing four hex fields — and the Relay panel's byte
+     * panes, where a single AFGH level-1 ciphertext is two 576-byte GT
+     * elements printed in full. All of them are siblings re-walking the same
+     * ancestors up to `<body>`. Without the caches the pass re-reads the same
+     * computed styles and rects tens of thousands of times. Nothing mutates
+     * the DOM during the pass, so the cached values cannot go stale.
      */
     const styleCache = new Map<Element, CSSStyleDeclaration>();
     const styleOf = (el: Element): CSSStyleDeclaration => {
@@ -534,9 +534,10 @@ export async function auditContrast(
       // A closed <details> hides its body with `content-visibility: hidden`,
       // not `display: none`, and Chromium keeps the last laid-out geometry for
       // that subtree — so the `display`/rect tests above all pass for text
-      // that paints nothing. `checkVisibility()` catches it. This page is full
-      // of the shape: the BIP-340 parity disclosure, both learner checks and
-      // all nineteen `.kat-item` vector rows are <details> that ship shut. The
+      // that paints nothing. `checkVisibility()` catches it. This page has the
+      // shape in several places: the hybrid-encryption note, the AFGH
+      // paper-wording note, the why-no-second-hop note, the named-alternatives
+      // list and the no-scheme-KATs note are all <details> that ship shut. The
       // gate opens them by clicking their <summary>, which is the route a
       // reader has, rather than setting `.open` from script — which is what
       // the gate this replaces did, to every <details> on the page, before its
