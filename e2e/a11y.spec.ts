@@ -13,17 +13,20 @@ import {
  *
  * The lab is driven along everything it teaches, and every state is scanned:
  * the arrival state with nothing yet encrypted and five tabpanels hidden AND
- * UNRENDERED; the shared skip link focused; all four relay steps under BOTH
- * schemes, including the exponent ledger mid-cancellation and the
- * byte-identical message half; all five failure codes — MALFORMED_RK,
- * RK_MISMATCH, ALREADY_REENCRYPTED, WRONG_LEVEL and the
- * COLLUSION_KEY_RECOVERED alarm; the AFGH collusion's bounded-residue caution
- * and the table of failed scalar guesses beside it; the unbounded BBS98 chain
- * and the delegation the proxy minted on its own; the delegation graph
- * accumulating, linking and clearing; the five-step revocation sequence and
- * the key rotation that ends it; the vectors table; four disclosures opened
- * through their own summaries; three hover states; and three focus rings. All
- * of it at desktop width and again at 380px.
+ * UNRENDERED; the shared skip link focused; BBS98 end to end and then AFGH end
+ * to end, since the scheme switch discards every rendered panel and half the
+ * page's states exist only on one side; all four relay steps and all three
+ * break-it controls under BOTH schemes; the retirement state and the manual
+ * reset; all five failure codes — MALFORMED_RK, RK_MISMATCH,
+ * ALREADY_REENCRYPTED, WRONG_LEVEL and the COLLUSION_KEY_RECOVERED alarm; the
+ * AFGH collusion's bounded-residue caution and the table of failed scalar
+ * guesses beside it; the unbounded BBS98 chain and the delegation the proxy
+ * minted on its own, against the same two-step path failing under AFGH; the
+ * delegation graph accumulating, linking and clearing; the revocation sequence
+ * and the key rotation that ends it, under both schemes; a full key
+ * regeneration; the three vector tables; EVERY disclosure the page ships,
+ * counted against the number it ships; three hover states; and three focus
+ * rings. All of it at desktop width and again at 380px.
  *
  * See `gate.ts` for why nothing is injected into the page (the old fleet gate's
  * `addStyleTag` motion kill bypassed the stylesheet's own reduced-motion block,

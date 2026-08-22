@@ -276,13 +276,27 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
 
   async function survives(): Promise<void> {
     if (lab.scheme === 'bbs98') {
+      // Shown, not asserted: BBS98 has no second key and no level structure, so
+      // the claim "nothing survives" is testable by taking the one ciphertext
+      // AFGH's level-1 form protects — a message Alice sends only to herself —
+      // and handing it to the recovered scalar.
+      const alice = lab.bbs('Alice');
+      const bob = lab.bbs('Bob');
+      const { recovered } = bbs98.collude(bbs98.rekeygen(alice, bob), bob.sk, alice.pk, alice.sk);
+      const priv = 'Alice’s private mail, addressed to nobody else.';
+      const ct = await bbs98.encrypt(alice, priv);
+      const got = await bbs98.decrypt(bbs98.keypairFromScalar('impostor', recovered), ct);
       replace(
         followUp,
+        el('h4', { text: 'The ciphertext AFGH’s level-1 form would protect, under BBS98' }),
+        el('div', { class: `bytes ${got === priv ? 'bytes-breach' : 'bytes-same'}`, text: got ?? '(unreadable)' }),
         verdict(
-          'alarm',
-          'Nothing survives',
-          'There is one secret in BBS98 and the colluders have it. There is no second key protecting anything, no level structure, and no ciphertext Alice can hold that the recovered scalar does not open. This is why the scheme is described as requiring bilateral unconditional trust: the paper says so itself — "A and B must trust one another bilaterally."',
-          'COLLUSION_KEY_RECOVERED'
+          got === priv ? 'alarm' : 'pass',
+          got === priv ? 'Nothing survives' : 'Something survived — unexpected',
+          got === priv
+            ? 'The same message the AFGH tab shows surviving a collusion is read here in full. There is one secret in BBS98 and the colluders have it: no second key, no level structure, and no ciphertext Alice can hold that the recovered scalar does not open. This is why the paper describes the construction as requiring bilateral unconditional trust — "A and B must trust one another bilaterally."'
+            : 'Please report.',
+          got === priv ? 'COLLUSION_KEY_RECOVERED' : undefined
         )
       );
       return;
@@ -362,7 +376,7 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
             trow('hops', 'unbounded, and transitive: rk(A→B)·rk(B→C) = rk(A→C)', 'exactly one, by construction'),
             trow('collusion yields — shown here', 'the delegator’s full private key a', 'the weak key g2^a1 only'),
             trow('what that opens — shown here', 'everything, forever, including future ciphertexts', 'level-2 ciphertexts only — the capability already delegated'),
-            trow('what survives — shown here', 'nothing', 'the master secret a1, and every level-1 ciphertext'),
+            trow('what survives — shown here', 'nothing — a fresh message, opened with the recovered key', 'the master secret a1, and every level-1 ciphertext'),
             trow('revocation', 'none', 'none in this construction — see the Un-delegate tab'),
           ]),
         ])
@@ -382,6 +396,13 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
         ),
         p(
           'One more thing the same paper is careful about, and which this page repeats on the Un-delegate tab: NO scheme in their table achieves non-transferability. Once the colluders hold g2^a1 they can hand it to anyone.'
+        ),
+        el('h4', { text: 'A note on which direction rk points' }),
+        p(
+          'This page builds BBS98’s re-encryption key as b·a⁻¹, following the EUROCRYPT paper, which writes it "the proxy key pi_{A→B} is a⁻¹b and the proxy function is simply c2^{pi}". AFGH’s related-work paragraph, quoted above, writes the same fact loosely as "(a/b)·b = a" — the reciprocal.'
+        ),
+        p(
+          'Both are in the literature and only one works for encryption. The reciprocal orientation is not a typo either: it is the correct one for the OTHER two cryptosystems in the same EUROCRYPT paper, the identification and signature schemes, where the delegatee’s secret must be required to build the proxy key rather than removed. The Vectors tab pins the encryption orientation with small scalars so a reader can check it by hand.'
         )
       )
     );

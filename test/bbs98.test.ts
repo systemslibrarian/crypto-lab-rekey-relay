@@ -235,12 +235,28 @@ describe('BBS98 — fail-closed edges', () => {
     expect(await decrypt(bob, out.value)).toBeNull();
   });
 
-  it('tampering with the message half breaks the AEAD tag rather than the plaintext', async () => {
+  it('tampering with the AEAD ciphertext is rejected by the tag', async () => {
     const alice = keygen('Alice');
     const ct = await encrypt(alice, MSG);
     const flipped = new Uint8Array(ct.payload.ct);
     flipped[0] = (flipped[0] ?? 0) ^ 1;
-    const tampered = { ...ct, payload: { ...ct.payload, ct: flipped } };
-    expect(await decrypt(alice, tampered)).toBeNull();
+    expect(await decrypt(alice, { ...ct, payload: { ...ct.payload, ct: flipped } })).toBeNull();
+  });
+
+  it('splicing another ciphertext’s c1 is rejected — and the AAD is not what catches it', async () => {
+    // Worth stating precisely, because the comment in `kem.ts` used to claim
+    // more. c1 is both the AAD and the component the KEM derives M from, so a
+    // spliced c1 changes the derived key and the tag fails regardless of the
+    // binding. Removing the AAD entirely leaves this test green. What it does
+    // prove is that a well-formed substitution yields NO plaintext rather than
+    // a wrong one.
+    const alice = keygen('Alice');
+    const a = await encrypt(alice, MSG);
+    const b = await encrypt(alice, 'a different message entirely');
+    expect(g1ToBytes(a.c1)).not.toEqual(g1ToBytes(b.c1));
+    expect(await decrypt(alice, { ...a, c1: b.c1 })).toBeNull();
+    // The same payload under its own c1 still opens, so the rejection is the
+    // swap and not a broken fixture.
+    expect(await decrypt(alice, a)).toBe(MSG);
   });
 });

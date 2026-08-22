@@ -15,12 +15,24 @@
  * apply to it directly (see `test/kat.test.ts`).
  *
  * The DEM ciphertext is bound with AES-GCM's additional authenticated data to
- * the ONE ciphertext component the proxy never touches. That is deliberate and
- * load-bearing: if a re-encryption ever altered the message-carrying half, the
- * AEAD tag would fail and the demo would say so, instead of silently producing
- * a plausible wrong answer. The property "the proxy transforms only the
- * key-carrying half" is therefore enforced by the cryptography, not asserted in
- * a caption.
+ * the one ciphertext component the proxy never touches — BBS98's `c1`, AFGH's
+ * `beta`. That component survives a re-encryption byte for byte, so the tag
+ * survives the proxy while any tampering with it surfaces as an authentication
+ * failure rather than as a wrong plaintext.
+ *
+ * BE PRECISE ABOUT HOW MUCH THAT BUYS, because it is less than it looks and an
+ * earlier version of this comment called it "load-bearing". It is not. In both
+ * of these schemes the AAD component is ALSO the component the KEM derives its
+ * key from: BBS98 recovers M as `c1 − [k]g`, AFGH as `beta / Z^(a1·k)`. Alter
+ * either one and the recovered group element changes, so the derived key
+ * changes, so the tag fails — with or without the AAD. Removing the binding
+ * entirely and re-running the suite confirms it: only the isolated primitive
+ * test in `kem.test.ts` notices.
+ *
+ * So the binding is defence in depth, not the mechanism. It is kept because it
+ * makes the intent explicit at the call site, it costs nothing, and it stops
+ * being redundant the moment anyone changes what the KEM derives from — which
+ * is exactly the kind of edit that would otherwise silently remove a check.
  */
 
 const HKDF_INFO_PREFIX = 'crypto-lab-rekey-relay/v1/';

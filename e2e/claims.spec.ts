@@ -1,5 +1,6 @@
 import { bls12_381 as bls } from '@noble/curves/bls12-381.js';
 import { expect, test, type Page } from '@playwright/test';
+import { FAILURE_CODES } from '../src/crypto/types';
 
 /**
  * The claims suite: does the page tell the truth?
@@ -135,11 +136,28 @@ test('AFGH collusion: the weak key is [a1]g2, re-derived from the page’s own r
   // Cross-check: the page's two surfaces agree.
   expect(weakHex).toBe(recomputedHex);
 
-  // Independent re-derivation, straight from @noble rather than `afgh.collude`:
-  // scale the printed rk point by the inverse of the printed b2 scalar.
   const rkPoint = bls.G2.Point.fromBytes(Buffer.from(rkHex, 'hex'));
-  const stripped = rkPoint.multiply(modInverse(hexToBigint(b2Hex), R));
-  expect(Buffer.from(stripped.toBytes(true)).toString('hex')).toBe(weakHex);
+  const weakPoint = bls.G2.Point.fromBytes(Buffer.from(weakHex, 'hex'));
+  const b2 = hexToBigint(b2Hex);
+
+  // Route A — the same shape the source uses, but with a hand-rolled inverse:
+  // scale the printed rk by b2^-1.
+  expect(Buffer.from(rkPoint.multiply(modInverse(b2, R)).toBytes(true)).toString('hex')).toBe(
+    weakHex
+  );
+
+  // Route B — a genuinely different operation. Instead of dividing a point,
+  // check the PAIRING identity e(g1, rk) == e(g1, weak)^b2. It shares no
+  // expression with `afgh.collude`, uses the target group rather than G2, and
+  // would fail if the page printed a weak key that merely looked plausible.
+  const lhs = bls.pairing(bls.G1.Point.BASE, rkPoint);
+  const rhs = bls.fields.Fp12.pow(bls.pairing(bls.G1.Point.BASE, weakPoint), b2);
+  expect(bls.fields.Fp12.eql(lhs, rhs)).toBe(true);
+
+  // Route C — the negative control: the same identity with a wrong scalar must
+  // NOT hold, so route B cannot be passing for a trivial reason.
+  const wrong = bls.fields.Fp12.pow(bls.pairing(bls.G1.Point.BASE, weakPoint), b2 + 1n);
+  expect(bls.fields.Fp12.eql(lhs, wrong)).toBe(false);
 
   // The master secret is NOT claimed to be recovered, and the page must not
   // print the alarm code here.
@@ -271,18 +289,43 @@ test('AFGH: the key half changes GROUP, and the page says so only when it does',
 
 // ── Every failure path names its actual cause ─────────────────────────────
 
-test('MALFORMED_RK names the structural reason, not a generic error', async ({ page }) => {
+/**
+ * Every code the page prints must be one the source actually defines.
+ *
+ * This is a cross-check rather than a spelling test: `FAILURE_CODES` is the
+ * exported enumeration in `src/crypto/types.ts`, so a code invented in a UI
+ * string — or a code renamed in one place and not the other — fails here.
+ */
+async function assertCodeIsDefined(page: Page, locator: string): Promise<string> {
+  const code = (await page.locator(locator).first().innerText()).trim();
+  expect(FAILURE_CODES as readonly string[]).toContain(code);
+  return code;
+}
+
+/** The same code must appear in the proxy's own journal for the same refusal. */
+async function assertJournalledWithCode(page: Page, code: string): Promise<void> {
+  const refusals = page.locator('.journal .journal-entry', { hasText: code });
+  expect(await refusals.count()).toBeGreaterThan(0);
+  await expect(refusals.first().locator('.journal-kind')).toHaveText('REFUSED');
+}
+
+test('MALFORMED_RK names the structural reason, and the proxy journals the same code', async ({
+  page,
+}) => {
   await boot(page);
   await page.getByRole('button', { name: /Alice encrypts/ }).click();
   await page.getByRole('button', { name: /Alice issues rk/ }).click();
   await page.getByRole('button', { name: 'Corrupt the rk' }).click();
   const v = page.locator('#panel-relay .verdict-fail');
-  await expect(v.locator('.code-tag')).toHaveText('MALFORMED_RK');
+  const code = await assertCodeIsDefined(page, '#panel-relay .verdict-fail .code-tag');
+  expect(code).toBe('MALFORMED_RK');
   await expect(v).toContainText('not a unit mod r');
   await expect(v).toContainText('every ciphertext to the same constant');
+  // Two surfaces, one event: the verdict and the proxy's own record agree.
+  await assertJournalledWithCode(page, code);
 });
 
-test('RK_MISMATCH names the mismatch, and explains why failing closed matters', async ({
+test('RK_MISMATCH names both endpoints, and the names match the delegation graph', async ({
   page,
 }) => {
   await boot(page);
@@ -290,20 +333,48 @@ test('RK_MISMATCH names the mismatch, and explains why failing closed matters', 
   await page.getByRole('button', { name: /Alice issues rk/ }).click();
   await page.getByRole('button', { name: /Carol’s ciphertext/ }).click();
   const v = page.locator('#panel-relay .verdict-fail');
-  await expect(v.locator('.code-tag')).toHaveText('RK_MISMATCH');
-  await expect(v).toContainText('re-encrypts from Alice');
+  const code = await assertCodeIsDefined(page, '#panel-relay .verdict-fail .code-tag');
+  expect(code).toBe('RK_MISMATCH');
   await expect(v).toContainText('nobody on earth can open');
+
+  // The two names in the refusal are read OFF THE PAGE and checked against the
+  // delegation the proxy actually holds, rather than against a literal.
+  const detail = await v.innerText();
+  const m = /addressed to (\w+).*re-encrypts from (\w+)/s.exec(detail);
+  expect(m, 'the refusal must name both endpoints').not.toBeNull();
+  const [, addressedTo, reencryptsFrom] = m!;
+  expect(addressedTo).not.toBe(reencryptsFrom);
+  await page.getByRole('tab', { name: /Delegation Graph/ }).click();
+  const edges = await page.locator('#panel-graph .edges .edge').first().innerText();
+  expect(edges).toContain(reencryptsFrom!);
+  expect(edges).not.toContain(addressedTo!);
 });
 
-test('ALREADY_REENCRYPTED names the group, not a policy', async ({ page }) => {
+test('ALREADY_REENCRYPTED names the group, and the byte sizes on the Relay tab agree', async ({
+  page,
+}) => {
   await boot(page);
   await switchScheme(page, 'AFGH');
   await page.getByRole('tab', { name: /One Hop/ }).click();
   await page.getByRole('button', { name: /Relay it down the chain/ }).click();
   const v = page.locator('#panel-onehop .verdict-pass');
-  await expect(v.locator('.code-tag')).toHaveText('ALREADY_REENCRYPTED');
+  const code = await assertCodeIsDefined(page, '#panel-onehop .verdict-pass .code-tag');
+  expect(code).toBe('ALREADY_REENCRYPTED');
   await expect(v).toContainText('already in GT');
   await expect(v).toContainText('nothing maps out of GT');
+  await assertJournalledWithCode(page, code);
+
+  // The reason given is a claim about GROUPS. Check it against the byte counts
+  // the Relay tab prints for the very same ciphertext shapes: a level-2 alpha
+  // is a 48-byte G1 point, a level-1 alpha is a 576-byte GT element.
+  await page.getByRole('tab', { name: /The Relay/ }).click();
+  await page.getByRole('button', { name: /Alice encrypts/ }).click();
+  const l2 = await fieldHex(page, '#panel-relay', 'alpha — key half (G1');
+  await page.getByRole('button', { name: /Alice issues rk/ }).click();
+  await page.getByRole('button', { name: /Proxy transforms/ }).click();
+  const l1 = await fieldHex(page, '#panel-relay', 'alpha — key half (GT');
+  expect(l2.length / 2).toBe(48);
+  expect(l1.length / 2).toBe(576);
 });
 
 test('WRONG_LEVEL fires in both directions and names the groups', async ({ page }) => {
@@ -313,9 +384,46 @@ test('WRONG_LEVEL fires in both directions and names the groups', async ({ page 
   await page.getByRole('button', { name: /Decrypt at the wrong level/ }).click();
   const codes = page.locator('#panel-onehop .code-tag');
   await expect(codes).toHaveCount(2);
-  await expect(codes.nth(0)).toHaveText('WRONG_LEVEL');
-  await expect(codes.nth(1)).toHaveText('WRONG_LEVEL');
+  for (let i = 0; i < 2; i++) {
+    const code = (await codes.nth(i).innerText()).trim();
+    expect(FAILURE_CODES as readonly string[]).toContain(code);
+    expect(code).toBe('WRONG_LEVEL');
+  }
   await expect(page.locator('#panel-onehop')).toContainText('not even in the same group');
+  // Both directions really are present: one verdict says the level-1 decryptor
+  // met a level-2 ciphertext, the other the reverse.
+  const text = await page.locator('#panel-onehop').innerText();
+  expect(text).toContain('Level-1 decryptor, level-2 ciphertext');
+  expect(text).toContain('Level-2 decryptor, level-1 ciphertext');
+});
+
+test('every failure code the source defines is reachable from the page', async ({ page }) => {
+  await boot(page);
+  const seen = new Set<string>();
+
+  // MALFORMED_RK and RK_MISMATCH, from the Relay tab under BBS98.
+  await page.getByRole('button', { name: /Alice encrypts/ }).click();
+  await page.getByRole('button', { name: /Alice issues rk/ }).click();
+  await page.getByRole('button', { name: 'Corrupt the rk' }).click();
+  seen.add((await page.locator('#panel-relay .code-tag').first().innerText()).trim());
+  await page.getByRole('button', { name: /Carol’s ciphertext/ }).click();
+  seen.add((await page.locator('#panel-relay .code-tag').first().innerText()).trim());
+
+  // COLLUSION_KEY_RECOVERED, from the Collusion tab under BBS98.
+  await page.getByRole('tab', { name: /Collusion/ }).click();
+  await page.getByRole('button', { name: 'Run the collusion' }).click();
+  seen.add((await page.locator('#panel-collusion .code-tag').first().innerText()).trim());
+
+  // ALREADY_REENCRYPTED and WRONG_LEVEL, from One Hop under AFGH.
+  await switchScheme(page, 'AFGH');
+  await page.getByRole('tab', { name: /One Hop/ }).click();
+  await page.getByRole('button', { name: /Relay it down the chain/ }).click();
+  seen.add((await page.locator('#panel-onehop .code-tag').first().innerText()).trim());
+  await page.getByRole('button', { name: /Decrypt at the wrong level/ }).click();
+  seen.add((await page.locator('#panel-onehop .code-tag').first().innerText()).trim());
+
+  // No code is declared and unreachable, and none is shown that is undeclared.
+  expect([...seen].sort()).toEqual([...FAILURE_CODES].sort());
 });
 
 test('BBS98 has no level structure, and the page says which scheme owns the code', async ({
@@ -361,37 +469,66 @@ test('the BBS98 composed key equals a genuine one, checked by re-deriving it', a
   await expect(page.locator('#panel-onehop .verdict-alarm')).toContainText('Identical');
 });
 
-test('the graph closure table agrees with the alarm that counts it', async ({ page }) => {
+/**
+ * Both halves of the graph claim, checked the same way.
+ *
+ * The point of running these as a PAIR is that the two schemes must produce
+ * the same table shape and differ only in the outcome column. An earlier
+ * version of the AFGH test asserted `tbody tr` count 0 — which passed
+ * vacuously, because that branch emitted no table at all. Asserting the same
+ * row count on both sides is what makes the difference a measurement.
+ */
+async function graphRows(page: Page): Promise<{ issued: number; composed: number; total: number }> {
+  const rows = page.locator('#panel-graph tbody tr');
+  const total = await rows.count();
+  let issued = 0;
+  let composed = 0;
+  for (let i = 0; i < total; i++) {
+    const origin = await rows.nth(i).locator('td').nth(2).innerText();
+    if (origin.includes('issued by the delegator')) issued++;
+    if (origin.includes('COMPOSED by the proxy')) composed++;
+  }
+  return { issued, composed, total };
+}
+
+test('BBS98: the graph table agrees with the alarm that counts it', async ({ page }) => {
   await boot(page);
   await page.getByRole('tab', { name: /Delegation Graph/ }).click();
   await page.locator('#panel-graph').getByRole('button', { name: 'Alice → Bob' }).click();
   await page.locator('#panel-graph').getByRole('button', { name: 'Bob → Carol' }).click();
 
-  const issued = await page.locator('#panel-graph .edges .edge').count();
-  const rows = page.locator('#panel-graph tbody tr');
-  const total = await rows.count();
-  let composedRows = 0;
-  for (let i = 0; i < total; i++) {
-    if ((await rows.nth(i).locator('td').nth(2).innerText()).includes('composed')) composedRows++;
-  }
-  // Two issued edges, and exactly one composed edge (Alice → Carol).
+  const { issued, composed, total } = await graphRows(page);
+  // Two issued edges plus one attempted two-step path (Alice → Carol).
   expect(issued).toBe(2);
-  expect(composedRows).toBe(1);
+  expect(total).toBe(3);
+  expect(composed).toBe(1);
+  // The edge list and the table must agree on how many were issued.
+  expect(await page.locator('#panel-graph .edges .edge').count()).toBe(issued);
   await expect(page.locator('#panel-graph .verdict-alarm')).toContainText(
-    `${composedRows} delegation nobody issued`
+    `${composed} delegation nobody issued`
   );
   await expect(page.locator('#panel-graph .verdict-alarm')).toContainText('Alice→Carol');
 });
 
-test('AFGH produces no composed edges at all', async ({ page }) => {
+test('AFGH: the same two-step path is attempted and fails', async ({ page }) => {
   await boot(page);
   await switchScheme(page, 'AFGH');
   await page.getByRole('tab', { name: /Delegation Graph/ }).click();
   await page.locator('#panel-graph').getByRole('button', { name: 'Alice → Bob' }).click();
   await page.locator('#panel-graph').getByRole('button', { name: 'Bob → Carol' }).click();
-  await expect(page.locator('#panel-graph tbody tr')).toHaveCount(0);
+
+  const { issued, composed, total } = await graphRows(page);
+  // SAME shape as BBS98 — the path is attempted, not skipped.
+  expect(issued).toBe(2);
+  expect(total).toBe(3);
+  expect(composed).toBe(0);
+  await expect(page.locator('#panel-graph tbody')).toContainText('not composable');
+  await expect(page.locator('#panel-graph tbody')).toContainText('CDH in G2');
   await expect(page.locator('#panel-graph .verdict-pass')).toContainText(
     'exactly the graph it was given'
+  );
+  await expect(page.locator('#panel-graph .verdict-pass')).toContainText(
+    '1 two-step path attempted'
   );
 });
 
@@ -416,7 +553,13 @@ test('the vectors summary count matches the rows it is counting', async ({ page 
 
   const headings = await page.locator('#panel-vectors h4').allInnerTexts();
   const parsed = headings.map((h) => /(\d+) \/ (\d+)/.exec(h)).filter(Boolean);
-  expect(parsed).toHaveLength(2);
+  // Three tables, kept separate on purpose: published vectors, self-checks,
+  // and scheme transcription checks. Only the first are known-answer tests.
+  expect(parsed).toHaveLength(3);
+  // `h4` is uppercased by CSS, so compare case-insensitively.
+  expect(headings[0]?.toLowerCase()).toContain('published specification vectors');
+  expect(headings[1]?.toLowerCase()).toContain('no document supplies the answer');
+  expect(headings[2]?.toLowerCase()).toContain('not specification vectors');
   const totalClaimed = parsed.reduce((n, m) => n + Number(m![2]), 0);
   const totalPassing = parsed.reduce((n, m) => n + Number(m![1]), 0);
 

@@ -19,9 +19,10 @@ export const NARROW = { width: 380, height: 800 };
  *     `animation:none!important; transition:none!important` through
  *     `addStyleTag`. That BYPASSES this lab's own
  *     `@media (prefers-reduced-motion: reduce)` block instead of exercising it,
- *     so the one rendering a reduced-motion reader actually gets — `.panel` and
- *     `.reveal` with their animations cancelled by the stylesheet's own rule —
- *     was never once the rendering that got scanned. This gate sets the
+ *     so the one rendering a reduced-motion reader actually gets — the
+ *     exponent-ledger tokens with `cancel-out` cancelled and its END STATE
+ *     restored by the stylesheet's own rule — was never once the rendering
+ *     that got scanned. This gate sets the
  *     preference through `emulateMedia`, asserts from inside the page that it
  *     took effect (`test.use({ reducedMotion })` silently does nothing on
  *     Playwright 1.61.1), and injects nothing.
@@ -30,20 +31,23 @@ export const NARROW = { width: 380, height: 800 };
  *     `[hidden]` attribute and set every `<details>.open` by JS before its only
  *     scan. Stripping `hidden` puts all six tabpanels on screen AT ONCE — a
  *     rendering no reader can reach and axe then scans instead of the real one
- *     — and script-opening the disclosures means the SHUT state, which is what
- *     every reader arrives at, was never scanned at all. This gate switches
- *     tabs by clicking them and opens each disclosure through its `<summary>`,
- *     which is the route a reader has, and scans before and after.
+ *     — and it would be actively wrong here, because five of the six panels
+ *     are not merely hidden but UNRENDERED until their tab is first clicked.
+ *     Script-opening the disclosures means the SHUT state, which is what every
+ *     reader arrives at, was never scanned at all. This gate switches tabs by
+ *     clicking them and opens each disclosure through its `<summary>`, which is
+ *     the route a reader has, and scans before and after.
  *
  *  3. IT DROVE BLIND AND THEN THREW THE STATES AWAY. The old drive clicked
  *     every button whose label matched a regex, swallowed every failure with
  *     `.catch(() => {})`, waited a fixed 120ms per tab, and scanned ONCE at the
- *     end — so the invalid-key rendering, the malformed-hex branch, the
- *     rejected-preset pipeline and the stepper's intermediate reveals were all
- *     overwritten before anything measured them, and a click that silently did
- *     nothing looked identical to one that worked. This drive names every
+ *     end. On a page like this one that would overwrite every state worth
+ *     scanning before anything measured it — each failure verdict replaces the
+ *     one before it in the same live region — and a click that silently did
+ *     nothing would look identical to one that worked. This drive names every
  *     control it touches, asserts a real completion signal after each, and
- *     scans after every step, in {dark, light} x {1280, 380}.
+ *     scans after every step, at 1280 and again at 380. There is only one
+ *     theme here, so the second axis is width alone.
  *
  *  4. `violations` IS NOT THE WHOLE ORACLE. See `scan`. axe has no rule at all
  *     for non-text contrast (WCAG 1.4.11) or reflow (1.4.10), it files every
@@ -59,8 +63,8 @@ export const NARROW = { width: 380, height: 800 };
  *  5. IT HAD NO REFLOW, NON-TEXT-CONTRAST OR GENERATED-CONTENT ORACLE. The old
  *     spec hand-rolled one luminance check over two input selectors, reading
  *     the DECLARED `border-top-color` and `background-color` — blind to
- *     `color-mix()`, to composited backdrops, to every `.btn`, `.seg-btn`,
- *     `.tab-btn` and preset control, and to all states past first paint.
+ *     `color-mix()`, to composited backdrops, to every button, `.seg-btn`,
+ *     `.tab-btn` and scroll region, and to all states past first paint.
  *     `nontext.ts` replaces it with a measured oracle over every control at
  *     every driven state, and `expectNoHorizontalOverflow` adds the 1.4.10
  *     check axe has no rule for.
@@ -82,11 +86,13 @@ export const NARROW = { width: 380, height: 800 };
  * gives up and proceeds, and Playwright's own timeout is the backstop.
  *
  * Under the reduced motion this gate asserts, `style.css`'s reduced-motion
- * block cancels `.panel` / `.reveal` animations and every transition, so
+ * block cancels the two exponent-ledger animations (`.tok-cancel`,
+ * `.tok-arrive`) and collapses every transition inside `#app` to 0.001ms, so
  * `getAnimations()` is normally empty and this returns on the sixth frame. It
  * stays because the shared top bar's `.cl-btn` transitions are declared
- * OUTSIDE the lab's `@media` block — `* { transition: none !important }` wins
- * today, but that is a property of the current stylesheet, not of the page.
+ * OUTSIDE the lab's `@media` block and are NOT collapsed — the block is
+ * scoped to `#app` — so a hover on a bar control really can leave a
+ * transition running while a scan starts.
  */
 export async function settle(page: Page, budgetMs = 4000): Promise<void> {
   await page.waitForFunction(
@@ -124,14 +130,16 @@ export async function settle(page: Page, budgetMs = 4000): Promise<void> {
  * visible state is an animation, in a stylesheet whose reduced-motion block
  * cancels that animation without restoring its end state — the element then
  * renders at `opacity: 0` for every reader with the preference set. This lab
- * has EXACTLY that shape in miniature: `@keyframes fade` and `@keyframes
- * reveal` both start `from { opacity: 0 }`, and every tab panel and every
- * stepper line rides one of them. The reduced-motion block cancels both with
- * `animation: none`, which restores the static `opacity: 1` — correct today,
- * and this assertion is what makes that a measurement rather than a reading.
+ * has that shape in miniature: `@keyframes cancel-out` ends the annihilated
+ * exponent tokens at a muted ink and a 0.92 scale, and `@keyframes arrive`
+ * flashes a newly-landed token's fill. The reduced-motion block cancels both
+ * with `animation: none` and then RESTORES the end state explicitly, rather
+ * than leaving the tokens at their start colour — which is what makes the
+ * cancellation legible to a reduced-motion reader. This assertion is what
+ * makes that a measurement rather than a reading.
  *
- * `aria-hidden` subtrees are excluded; what this lab hides is decorative
- * verdict/pill glyphs beside their own words — see `contrast.ts`.
+ * `aria-hidden` subtrees are excluded; the only ones on this page are the
+ * shared bar's two SVG marks, which carry no text — see `contrast.ts`.
  */
 async function expectNotBlank(page: Page, label: string): Promise<void> {
   const invisible = await page.evaluate(() => {
@@ -386,12 +394,15 @@ export async function expectNoHorizontalOverflow(page: Page, label: string): Pro
  * If it holds no focusable content it needs `tabindex="0"`, so it becomes a
  * focus target arrow keys can then scroll.
  *
- * This lab currently avoids scrollers on purpose — long hex wraps via
- * `overflow-wrap: anywhere` — so the assertion is usually vacuous here. It
- * runs at every state anyway, because the requirement MATERIALISES the moment
- * someone reaches for `overflow-x: auto` on a wide value or table (the
- * stylesheet already carries an unused `.table-wrap` rule inviting exactly
- * that), and a scroller born without a keyboard route is invisible to axe.
+ * This lab has two live scrollers and both hold real content: `.journal`, the
+ * persistent proxy record, which is `overflow: auto` with a 21rem cap; and
+ * every `.table-wrap`, which scrolls horizontally at phone width. Both are
+ * built through `dom.ts`'s `scrollRegion()` / `tableWrap()` helpers, which
+ * attach `tabindex="0"`, `role="region"` and a label — and the first full
+ * drive of this gate failed on `.table-wrap` before those helpers existed, as
+ * `scrollable-region-focusable`, at 380px only. The assertion runs at every
+ * state because a scroller born without a keyboard route is invisible to axe
+ * at desktop width.
  */
 export async function expectScrollersReachable(page: Page, label: string): Promise<void> {
   const unreachable = await page.evaluate(() => {
@@ -613,6 +624,12 @@ export function expectBaselineNotStale(): void {
  *  - reflow — WCAG 1.4.10, which axe has no rule for at all.
  */
 export async function scan(page: Page, label: string): Promise<void> {
+  // `SCAN_TRACE=1` prints every state as it is scanned. It exists because a
+  // drive that silently stops early looks exactly like a fast one, and this
+  // gate got 6x faster once the machine stopped being busy — the only way to
+  // tell that apart from a truncated drive is to count the scans. Never set in
+  // CI; it changes nothing about what is asserted.
+  if (process.env.SCAN_TRACE) console.log(`SCAN ${label}`);
   await settle(page);
   await expectNotBlank(page, label);
   // TWO axe runs, deliberately, and this is not a style choice.
@@ -704,17 +721,18 @@ export async function scan(page: Page, label: string): Promise<void> {
  *    that is never even IN the DOM. Each of the six is activated through its
  *    real tab button and scanned in its own driven states.
  *
- *  - BOTH SCHEMES. The scheme switch is this lab's central control and it
- *    discards every rendered panel, so half the page's states only exist under
- *    AFGH: the point-valued re-encryption key, the bounded collusion residue,
- *    the ALREADY_REENCRYPTED refusal, the WRONG_LEVEL pair. The drive runs the
- *    Relay and Collusion tabs under both.
+ *  - BOTH SCHEMES, ON EVERY TAB THAT DIFFERS BETWEEN THEM. The scheme switch
+ *    is this lab's central control and it discards every rendered panel, so
+ *    half the page's states only exist on one side: the point-valued
+ *    re-encryption key, the bounded collusion residue, the ALREADY_REENCRYPTED
+ *    refusal, the WRONG_LEVEL pair, the graph's two-step composition failing
+ *    rather than succeeding, and the revocation panel's weak-key wording. The
+ *    drive runs BBS98 end to end, switches once, and runs AFGH end to end.
  *
- *  - EVERY FAILURE PATH. All five failure codes are reachable by hand and all
- *    five are driven: MALFORMED_RK, RK_MISMATCH, ALREADY_REENCRYPTED,
- *    WRONG_LEVEL and the COLLUSION_KEY_RECOVERED alarm. None of these renders
- *    without pressing something on purpose, and the alarm verdict is the
- *    highest-contrast surface on the page.
+ *  - EVERY FAILURE PATH, ON BOTH SIDES WHERE BOTH EXIST. All five failure
+ *    codes are reachable by hand and all five are driven; the three Relay
+ *    break-it controls are driven under each scheme, because the refusal text
+ *    and the ciphertext shapes behind it differ.
  *
  *  - HOVER IS A STATE, AND IT PERSISTS AFTER A CLICK. `:hover` stays on the
  *    element under the pointer after `page.click()` resolves, so it is the
@@ -724,9 +742,30 @@ export async function scan(page: Page, label: string): Promise<void> {
  *
  *  - NO FIXED TIMEOUTS. Every wait is on a real DOM completion signal: a
  *    verdict appearing, a pill's wording, `aria-selected`, `aria-pressed`.
+ *
+ * `expectAllDisclosuresDriven` at the end is the coverage ratchet: it counts
+ * the `<details>` the page ships and fails if any was never opened, so adding
+ * one without adding a scan is caught here rather than shipping unscanned.
  */
 export async function driveAllStates(page: Page, label: string): Promise<void> {
   const scanAt = (s: string): Promise<void> => scan(page, `${label} / ${s}`);
+  const opened = new Set<string>();
+
+  /**
+   * Open a disclosure through its own summary — the route a reader has, and
+   * the reason nothing here sets `.open` from script.
+   *
+   * `selector` addresses the `<details>` itself rather than a container, so the
+   * page-level one (a direct child of `#app`) and the per-panel ones use the
+   * same helper without a nested-descendant surprise.
+   */
+  const openDisclosure = async (selector: string, index: number, note: string): Promise<void> => {
+    const d = page.locator(selector).nth(index);
+    await d.locator('summary').first().click();
+    await expect(d).toHaveAttribute('open', '');
+    opened.add(`${selector}#${index}`);
+    await scanAt(`disclosure open: ${note}`);
+  };
 
   await scanAt('arrival: Relay active, five panels unrendered, journal empty, disclosures shut');
 
@@ -736,26 +775,25 @@ export async function driveAllStates(page: Page, label: string): Promise<void> {
   await expect(page.locator('a.cl-skip-link')).toBeFocused();
   await scanAt('the shared skip link focused, slid in from top:-3rem');
 
-  // ── Relay, under BBS98 ──────────────────────────────────────────────────
+  // ══ BBS98, end to end ═══════════════════════════════════════════════════
+
   await runRelay(page, scanAt, 'BBS98');
+  await runRelayFailures(page, scanAt, 'BBS98');
 
-  // The break-it paths. Each renders a failure verdict with its code.
-  await page.getByRole('button', { name: 'Corrupt the rk' }).click();
-  await expect(page.locator('#panel-relay .code-tag')).toContainText('MALFORMED_RK');
-  await scanAt('Relay/BBS98: MALFORMED_RK — a zero scalar refused at the proxy');
+  // The retirement state: editing the message discards every result below it.
+  await page.fill('#relay-msg', 'a different message entirely');
+  await expect(page.locator('#panel-relay .step-note').first()).toContainText('RETIRED');
+  await expect(page.locator('#panel-relay .verdict-pass')).toHaveCount(0);
+  await scanAt('Relay: the message edited — every downstream result retired');
 
-  await page.getByRole('button', { name: /Carol’s ciphertext/ }).click();
-  await expect(page.locator('#panel-relay .code-tag')).toContainText('RK_MISMATCH');
-  await scanAt('Relay/BBS98: RK_MISMATCH — a ciphertext the installed key was not issued for');
+  await page.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect(page.locator('#panel-relay .step-note').first()).toContainText(
+    'Nothing has been encrypted yet'
+  );
+  await scanAt('Relay: reset to the empty state by hand');
 
-  await page.getByRole('button', { name: /Alice reads it after the hop/ }).click();
-  await expect(page.locator('#panel-relay .verdict-caution')).toBeVisible();
-  await scanAt('Relay/BBS98: the delegator locked out of her own ciphertext');
-
-  // The disclosure, opened the way a reader opens it — through its summary.
-  await page.locator('#panel-relay details > summary').first().click();
-  await expect(page.locator('#panel-relay details[open]')).toHaveCount(1);
-  await scanAt('Relay: the hybrid-encryption disclosure open');
+  await openDisclosure('#panel-relay details', 0, 'the hybrid-encryption note');
+  await openDisclosure('#panel-relay details', 1, 'the Type-3 adaptation note');
 
   // ── Collusion, under BBS98: the alarm ───────────────────────────────────
   await openTab(page, /Collusion/, '#panel-collusion');
@@ -776,21 +814,90 @@ export async function driveAllStates(page: Page, label: string): Promise<void> {
   await expect(page.locator('#panel-collusion .verdict-alarm').last()).toContainText(
     'Nothing survives'
   );
-  await scanAt('Collusion/BBS98: nothing survives');
+  await scanAt('Collusion/BBS98: the private message opened with the recovered key');
 
-  await page.locator('#panel-collusion details > summary').first().click();
-  await expect(page.locator('#panel-collusion details[open]')).toHaveCount(1);
-  await scanAt('Collusion: the paper-wording disclosure open');
+  await openDisclosure('#panel-collusion details', 0, 'the AFGH paper-wording note');
 
-  // ── The scheme switch — half this page only exists on the other side ────
+  // ── Delegation graph, under BBS98: a composed edge ──────────────────────
+  await openTab(page, /Delegation Graph/, '#panel-graph');
+  await scanAt('Graph/BBS98: the edges accumulated so far');
+
+  await page.locator('#panel-graph').getByRole('button', { name: 'Bob → Carol' }).click();
+  await expect(page.locator('#panel-graph .verdict-alarm')).toContainText('nobody issued');
+  await scanAt('Graph/BBS98: a two-step path the proxy composed for itself');
+
+  await page.getByRole('button', { name: 'Show the link' }).click();
+  await expect(page.locator('#panel-graph .verdict-caution')).toContainText('Identical');
+  await scanAt('Graph/BBS98: the public linkability of a re-encryption');
+
+  await openDisclosure('#panel-graph details', 0, 'what a deployment can do about the graph');
+
+  await page.locator('#panel-graph').getByRole('button', { name: 'Clear the proxy' }).click();
+  await expect(page.locator('#panel-graph .hint').first()).toBeVisible();
+  await scanAt('Graph: the proxy cleared, back to an empty graph');
+
+  // ── One Hop, under BBS98: unbounded, and transitive ─────────────────────
+  await openTab(page, /One Hop/, '#panel-onehop');
+  await scanAt('One Hop: the arrival state');
+
+  await page.getByRole('button', { name: /Relay it down the chain/ }).click();
+  await expect(page.locator('#panel-onehop .verdict-caution')).toContainText(
+    'The chain never stopped'
+  );
+  await scanAt('One Hop/BBS98: three hops, no limit reached');
+
+  await page.getByRole('button', { name: /mint a key nobody issued/ }).click();
+  await expect(page.locator('#panel-onehop .verdict-alarm')).toContainText('Identical');
+  await scanAt('One Hop/BBS98: the proxy minted a delegation nobody authorised');
+
+  await page.getByRole('button', { name: /Decrypt at the wrong level/ }).click();
+  await expect(page.locator('#panel-onehop .verdict-caution')).toContainText(
+    'no levels to get wrong'
+  );
+  await scanAt('One Hop/BBS98: no levels to get wrong');
+
+  await openDisclosure('#panel-onehop details', 0, 'why there is no second hop');
+
+  // ── Un-delegate, under BBS98 ────────────────────────────────────────────
+  await openTab(page, /Un-delegate/, '#panel-undelegate');
+  await scanAt('Un-delegate: the arrival state');
+
+  await page.getByRole('button', { name: 'Try to un-delegate' }).click();
+  await expect(page.locator('#panel-undelegate .verdict-alarm')).toContainText(
+    'The revocation revoked nothing'
+  );
+  await scanAt('Un-delegate/BBS98: the five-step sequence, ending in the alarm');
+
+  await page.getByRole('button', { name: /the only way that works/ }).click();
+  await expect(page.locator('#panel-undelegate .verdict-pass')).toContainText(
+    'The stolen key is now worthless'
+  );
+  await scanAt('Un-delegate/BBS98: key rotation, the only move that works');
+
+  await openDisclosure('#panel-undelegate details', 0, 'the named revocation alternatives');
+
+  // ══ The scheme switch, and AFGH end to end ══════════════════════════════
+
   await page.locator('.seg-btn', { hasText: 'AFGH' }).click();
   await expect(page.locator('.seg-btn', { hasText: 'AFGH' })).toHaveAttribute(
     'aria-pressed',
     'true'
   );
-  await expect(page.locator('#panel-collusion')).not.toBeEmpty();
+  await expect(page.locator('#panel-undelegate')).not.toBeEmpty();
   await scanAt('the scheme switched to AFGH — every panel rebuilt');
 
+  await page.getByRole('button', { name: 'Try to un-delegate' }).click();
+  await expect(page.locator('#panel-undelegate .verdict-alarm')).toBeVisible();
+  await scanAt('Un-delegate/AFGH: the weak key still reading after revocation');
+
+  await page.getByRole('button', { name: /the only way that works/ }).click();
+  await expect(page.locator('#panel-undelegate .verdict-pass')).toContainText(
+    'The weak key is now worthless'
+  );
+  await scanAt('Un-delegate/AFGH: rotation retires the weak key');
+
+  // ── Collusion, under AFGH: the bounded residue ──────────────────────────
+  await openTab(page, /Collusion/, '#panel-collusion');
   await page.getByRole('button', { name: 'Run the collusion' }).click();
   await expect(page.locator('#panel-collusion .verdict-caution')).toContainText(
     'The master secret survived'
@@ -807,14 +914,13 @@ export async function driveAllStates(page: Page, label: string): Promise<void> {
   );
   await scanAt('Collusion/AFGH: the table of failed scalar guesses, and what holds');
 
-  // ── Relay again, under AFGH: a point-valued rk ──────────────────────────
+  // ── Relay, under AFGH: a point-valued rk and GT ciphertexts ─────────────
   await openTab(page, /The Relay/, '#panel-relay');
   await runRelay(page, scanAt, 'AFGH');
+  await runRelayFailures(page, scanAt, 'AFGH');
 
-  // ── One Hop ─────────────────────────────────────────────────────────────
+  // ── One Hop, under AFGH: the ratchet ────────────────────────────────────
   await openTab(page, /One Hop/, '#panel-onehop');
-  await scanAt('One Hop: the arrival state');
-
   await page.getByRole('button', { name: /Relay it down the chain/ }).click();
   await expect(page.locator('#panel-onehop .code-tag')).toContainText('ALREADY_REENCRYPTED');
   await scanAt('One Hop/AFGH: the chain stops — ALREADY_REENCRYPTED');
@@ -828,79 +934,37 @@ export async function driveAllStates(page: Page, label: string): Promise<void> {
   await expect(page.locator('#panel-onehop .verdict-pass')).toBeVisible();
   await scanAt('One Hop/AFGH: composition refused — CDH, not arithmetic');
 
-  await page.locator('#panel-onehop details > summary').first().click();
-  await expect(page.locator('#panel-onehop details[open]')).toHaveCount(1);
-  await scanAt('One Hop: the why-there-is-no-second-hop disclosure open');
-
-  // Back to BBS98 for the states only it has: an unbounded chain and a
-  // delegation the proxy minted on its own.
-  await page.locator('.seg-btn', { hasText: 'BBS98' }).click();
-  await expect(page.locator('.seg-btn', { hasText: 'BBS98' })).toHaveAttribute(
-    'aria-pressed',
-    'true'
-  );
-  await page.getByRole('button', { name: /Relay it down the chain/ }).click();
-  await expect(page.locator('#panel-onehop .verdict-caution')).toContainText(
-    'The chain never stopped'
-  );
-  await scanAt('One Hop/BBS98: three hops, no limit reached');
-
-  await page.getByRole('button', { name: /mint a key nobody issued/ }).click();
-  await expect(page.locator('#panel-onehop .verdict-alarm')).toContainText('Identical');
-  await scanAt('One Hop/BBS98: the proxy minted a delegation nobody authorised');
-
-  await page.getByRole('button', { name: /Decrypt at the wrong level/ }).click();
-  await expect(page.locator('#panel-onehop .verdict-caution')).toContainText('no levels to get wrong');
-  await scanAt('One Hop/BBS98: no levels to get wrong');
-
-  // ── Delegation graph ────────────────────────────────────────────────────
+  // ── Delegation graph, under AFGH: the same path, not composable ─────────
   await openTab(page, /Delegation Graph/, '#panel-graph');
-  await scanAt('Graph: the accumulated edges from everything driven so far');
-
-  await page.locator('#panel-graph').getByRole('button', { name: 'Carol → Dave' }).click();
-  await expect(page.locator('#panel-graph .edge')).not.toHaveCount(0);
-  await scanAt('Graph: another edge added by hand');
+  await page.locator('#panel-graph').getByRole('button', { name: 'Alice → Bob' }).click();
+  await page.locator('#panel-graph').getByRole('button', { name: 'Bob → Carol' }).click();
+  await expect(page.locator('#panel-graph .verdict-pass')).toContainText(
+    'exactly the graph it was given'
+  );
+  await scanAt('Graph/AFGH: the same two-step path attempted, and not composable');
 
   await page.getByRole('button', { name: 'Show the link' }).click();
   await expect(page.locator('#panel-graph .verdict-caution')).toContainText('Identical');
-  await scanAt('Graph: the public linkability of a re-encryption');
+  await scanAt('Graph/AFGH: linkability, which neither scheme escapes');
 
-  await page.locator('#panel-graph').getByRole('button', { name: 'Clear the proxy' }).click();
-  await expect(page.locator('#panel-graph .hint').first()).toBeVisible();
-  await scanAt('Graph: the proxy cleared, back to an empty graph');
-
-  // ── Un-delegate ─────────────────────────────────────────────────────────
-  await openTab(page, /Un-delegate/, '#panel-undelegate');
-  await scanAt('Un-delegate: the arrival state');
-
-  await page.getByRole('button', { name: 'Try to un-delegate' }).click();
-  await expect(page.locator('#panel-undelegate .verdict-alarm')).toContainText(
-    'The revocation revoked nothing'
-  );
-  await scanAt('Un-delegate: the five-step sequence, ending in the alarm');
-
-  await page.getByRole('button', { name: /the only way that works/ }).click();
-  await expect(page.locator('#panel-undelegate .verdict-pass')).toContainText(
-    'The stolen key is now worthless'
-  );
-  await scanAt('Un-delegate: key rotation, the only move that works');
-
-  await page.locator('#panel-undelegate details > summary').first().click();
-  await expect(page.locator('#panel-undelegate details[open]')).toHaveCount(1);
-  await scanAt('Un-delegate: the named-alternatives disclosure open');
+  // ── A fresh cast, which clears the proxy and every panel ────────────────
+  await page.getByRole('button', { name: 'New keys for everyone' }).click();
+  await expect(page.locator('.proxyview .pill-ok')).toContainText('plaintext bytes found: 0');
+  await scanAt('every key regenerated and the proxy record cleared');
 
   // ── Vectors ─────────────────────────────────────────────────────────────
   await openTab(page, /Vectors/, '#panel-vectors');
   await expect(page.locator('#panel-vectors .verdict-pass')).toContainText(
     'Every vector recomputed and matched'
   );
-  await expect(page.locator('#panel-vectors .kat-pass')).toHaveCount(17);
+  await expect(page.locator('#panel-vectors .kat-pass')).toHaveCount(19);
   await expect(page.locator('#panel-vectors .kat-fail')).toHaveCount(0);
   await scanAt('Vectors: every published vector recomputed in the browser');
 
-  await page.locator('#panel-vectors details > summary').first().click();
-  await expect(page.locator('#panel-vectors details[open]')).toHaveCount(1);
-  await scanAt('Vectors: the why-there-are-no-scheme-KATs disclosure open');
+  await openDisclosure('#panel-vectors details', 0, 'why there are no scheme KATs');
+
+  // ── The page-level scoping disclosure ───────────────────────────────────
+  await openDisclosure('#app > details', 0, 'what this page does NOT prove');
 
   // ── Hover, which persists after a click ─────────────────────────────────
   await page.getByRole('tab', { name: /The Relay/ }).hover();
@@ -924,6 +988,34 @@ export async function driveAllStates(page: Page, label: string): Promise<void> {
 
   await page.getByRole('tab', { name: /Vectors/ }).focus();
   await scanAt('a tab focused');
+
+  await expectAllDisclosuresDriven(page, opened.size);
+}
+
+/**
+ * Coverage ratchet: every `<details>` the page ships must have been opened.
+ *
+ * A disclosure that ships but is never driven has an entire rendering — an
+ * open summary with its border-top, plus a `.details-body` full of prose — that
+ * no scan ever sees. Counting them here means adding one without adding a scan
+ * fails the gate rather than shipping unmeasured.
+ */
+async function expectAllDisclosuresDriven(page: Page, driven: number): Promise<void> {
+  // Panels render lazily and a scheme switch or a key regeneration discards
+  // them, so `document.querySelectorAll('details')` at any single moment is NOT
+  // the population — it is whatever the active tab happens to hold. Walk every
+  // tab once and sum, then add the page-level one that lives outside the tabs.
+  let shipped = await page.locator('#app > details').count();
+  const tabs = ['relay', 'collusion', 'onehop', 'graph', 'undelegate', 'vectors'];
+  for (const id of tabs) {
+    await page.locator(`#tab-${id}`).click();
+    await expect(page.locator(`#panel-${id}`)).not.toBeEmpty();
+    shipped += await page.locator(`#panel-${id} details`).count();
+  }
+  expect(
+    driven,
+    'every <details> the page ships must be opened by the drive — add a scan, not an exemption'
+  ).toBe(shipped);
 }
 
 /**
@@ -947,12 +1039,33 @@ async function runRelay(
 
   await page.getByRole('button', { name: /Proxy transforms/ }).click();
   await expect(page.locator('#panel-relay .tag-same')).not.toHaveCount(0);
-  await expect(page.locator('#panel-relay .verdict-pass')).toContainText('the message half did not move');
+  await expect(page.locator('#panel-relay .verdict-pass')).toContainText(
+    'the message half did not move'
+  );
   await scanAt(`Relay/${scheme}: transformed — the cancellation, and the byte-identical half`);
 
   await page.getByRole('button', { name: /Bob decrypts/ }).click();
   await expect(page.locator('#panel-relay .verdict-pass')).toContainText('Byte-for-byte identical');
   await scanAt(`Relay/${scheme}: Bob's plaintext compared against what Alice typed`);
+}
+
+/** The three break-it controls, driven under whichever scheme is selected. */
+async function runRelayFailures(
+  page: Page,
+  scanAt: (s: string) => Promise<void>,
+  scheme: string
+): Promise<void> {
+  await page.getByRole('button', { name: 'Corrupt the rk' }).click();
+  await expect(page.locator('#panel-relay .code-tag')).toContainText('MALFORMED_RK');
+  await scanAt(`Relay/${scheme}: MALFORMED_RK — a degenerate key refused at the proxy`);
+
+  await page.getByRole('button', { name: /Carol’s ciphertext/ }).click();
+  await expect(page.locator('#panel-relay .code-tag')).toContainText('RK_MISMATCH');
+  await scanAt(`Relay/${scheme}: RK_MISMATCH — a ciphertext the installed key was not issued for`);
+
+  await page.getByRole('button', { name: /Alice reads it after the hop/ }).click();
+  await expect(page.locator('#panel-relay .verdict-caution')).toBeVisible();
+  await scanAt(`Relay/${scheme}: the delegator locked out of her own ciphertext`);
 }
 
 /** Switch to a tab by clicking it, and prove the switch happened. */

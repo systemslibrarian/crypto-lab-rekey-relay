@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  Fp12,
   bytesToHex,
   bytesToScalar,
   divScalar,
@@ -130,7 +131,12 @@ describe('the three groups', () => {
   });
 
   it('GT has order r: Z^r is the identity', () => {
-    expect(gtEquals(gtPow(Z, ORDER), gtPow(Z, 0n))).toBe(true);
+    // NOT via `gtPow`, which reduces its exponent modulo r — `gtPow(Z, ORDER)`
+    // is `Fp12.pow(Z, 0n)` and the assertion would hold for a Z of any order.
+    // The raw field power is the only form that measures the property.
+    expect(Fp12.eql(Fp12.pow(Z, ORDER), Fp12.ONE)).toBe(true);
+    // And the reduction itself is worth pinning, since three modules rely on it.
+    expect(gtEquals(gtPow(Z, ORDER + 5n), gtPow(Z, 5n))).toBe(true);
   });
 
   it('GT multiplication and division invert each other', () => {

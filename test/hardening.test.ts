@@ -22,6 +22,35 @@ import {
  * there. Each one corresponds to a specific thing the page says out loud.
  */
 
+/**
+ * A point on E(Fp) that is NOT in the order-r subgroup.
+ *
+ * BLS12-381's G1 cofactor is not 1, so such points exist and are exactly what a
+ * small-subgroup attack feeds in. `G1.Point.fromBytes` rejects them; raw
+ * arithmetic on an object built by hand does not, which is why every value
+ * this lab receives is round-tripped through the wire encoding first.
+ */
+function offSubgroupG1(): InstanceType<typeof bls.G1.Point> {
+  const Fp = bls.fields.Fp;
+  for (let x = 1n; x < 500n; x++) {
+    // E(Fp): y^2 = x^3 + 4
+    const y2 = Fp.add(Fp.pow(Fp.create(x), 3n), Fp.create(4n));
+    let y: bigint;
+    try {
+      y = Fp.sqrt(y2);
+    } catch {
+      continue; // not a quadratic residue: no point at this x
+    }
+    if (Fp.mul(y, y) !== y2) continue;
+    const p = bls.G1.Point.fromAffine({ x: Fp.create(x), y });
+    if (p.is0()) continue;
+    // `isTorsionFree` is exactly "in the order-r subgroup". We want one that
+    // is on the curve and is NOT.
+    if (!p.isTorsionFree()) return p;
+  }
+  throw new Error('no off-subgroup point found in the search range');
+}
+
 describe('the two AFGH key components must be independent (page: "the split is the reason it survives")', () => {
   it('a2 = a1 is a TOTAL break: the public key alone opens every level-2 ciphertext', async () => {
     const a1 = randomScalar();
@@ -205,7 +234,7 @@ describe('degenerate ciphertext components fail closed rather than throwing', ()
     expect(out.detail).toContain('not a well-formed level-2 ciphertext');
   });
 
-  it('AFGH: a level-2 alpha of the identity is refused by the proxy transform', async () => {
+  it('AFGH: a level-2 alpha of the identity is refused by reencrypt', async () => {
     const alice = afgh.keygen('Alice');
     const bob = afgh.keygen('Bob');
     const ct = await afgh.encryptLevel2(afgh.publicKey(alice), 'x');
@@ -215,6 +244,60 @@ describe('degenerate ciphertext components fail closed rather than throwing', ()
     if (out.ok) return;
     expect(out.code).toBe('WRONG_LEVEL');
     expect(out.detail).toContain('identity point');
+  });
+
+  it('AFGH: an off-subgroup alpha is refused before it reaches the pairing', async () => {
+    const alice = afgh.keygen('Alice');
+    const bob = afgh.keygen('Bob');
+    const ct = await afgh.encryptLevel2(afgh.publicKey(alice), 'x');
+    const out = afgh.reencrypt(
+      { ...ct, alpha: offSubgroupG1() },
+      afgh.rekeygen(alice, afgh.publicKey(bob))
+    );
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.code).toBe('WRONG_LEVEL');
+    expect(out.detail).toContain('not a well-formed level-2 ciphertext');
+  });
+
+  it('THE PROXY, not just the scheme: every degenerate ciphertext is refused, never thrown', async () => {
+    const proxy = new Proxy();
+    const alice = afgh.keygen('Alice');
+    const bob = afgh.keygen('Bob');
+    expect(proxy.install(afgh.rekeygen(alice, afgh.publicKey(bob))).ok).toBe(true);
+    const id = proxy.edgeId('afgh', 'Alice', 'Bob');
+    const ct = await afgh.encryptLevel2(afgh.publicKey(alice), 'x');
+
+    // The proxy journals what it receives BEFORE validating it, so the journal
+    // itself has to survive the malformed input. Both of these threw before the
+    // journal used the same safe serialization the re-encryption key already had.
+    for (const bad of [ct.alpha.subtract(ct.alpha), offSubgroupG1()]) {
+      const out = proxy.transform(id, { ...ct, alpha: bad });
+      expect(out.ok).toBe(false);
+      if (out.ok) return;
+      expect(out.code).toBe('WRONG_LEVEL');
+    }
+
+    // BBS98 has no pairing and no levels, so a degenerate c2 does not make the
+    // transform impossible — [rk]O is just O. What matters is that it does not
+    // THROW, that the journal survives serializing an unencodable point, and
+    // that the result is unopenable rather than a wrong plaintext.
+    const b = bbs98.keygen('Alice');
+    const b2 = bbs98.keygen('Bob');
+    const p2 = new Proxy();
+    p2.install(bbs98.rekeygen(b, b2));
+    const bct = await bbs98.encrypt(b, 'x');
+    const degenerate = p2.transform(p2.edgeId('bbs98', 'Alice', 'Bob'), {
+      ...bct,
+      c2: bct.c2.subtract(bct.c2),
+    });
+    expect(degenerate.ok).toBe(true);
+    if (!degenerate.ok) return;
+    expect(await bbs98.decrypt(b2, degenerate.value as typeof bct)).toBeNull();
+    expect(p2.journal.some((e) => e.kind === 'ciphertext-in')).toBe(true);
+    expect(
+      p2.journal.some((e) => e.fields.some((f) => f.name.includes('no valid encoding')))
+    ).toBe(true);
   });
 
   it('AFGH: a level-1 alpha outside GT is refused before any secret touches it', async () => {

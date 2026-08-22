@@ -162,57 +162,79 @@ export function renderGraph(lab: Lab, host: HTMLElement): void {
 
     replace(graphBox, el('h4', { text: 'Nodes' }), nodeList, el('h4', { text: 'Issued edges' }), edgeList);
 
-    if (lab.scheme === 'bbs98' && live.length > 0) {
-      const closure = transitiveClosure(live.map((e) => [e.from, e.to] as [string, string]));
-      const extra = closure.filter(([f, t]) => !live.some((e) => e.from === f && e.to === t));
-      graphBox.appendChild(el('h4', { text: 'What the proxy can actually do' }));
-      graphBox.appendChild(
-        tableWrap(
-          'Delegations the proxy can perform, scrollable',
-          el('table', {}, [
-            el('caption', {
-              text: 'BBS98 re-encryption keys multiply. Rows marked "composed" were never issued by anyone.',
-            }),
-            el('thead', {}, [
-              el('tr', {}, [
-                el('th', { text: 'from' }),
-                el('th', { text: 'to' }),
-                el('th', { text: 'origin' }),
-              ]),
+    if (live.length === 0) return;
+
+    // Every two-step path in the issued graph, with the composition ATTEMPTED
+    // rather than assumed. Under BBS98 the proxy multiplies two scalars and the
+    // result verifies against the two public keys; under AFGH the only moves
+    // available on points do not land on the genuine key, and the check says so
+    // because it ran, not because the scheme's name implies it.
+    const paths = twoStepPaths(live.map((e) => [e.from, e.to] as [Actor, Actor]));
+    const rows: HTMLElement[] = live.map((e) =>
+      el('tr', {}, [
+        el('td', { text: e.from }),
+        el('td', { text: e.to }),
+        el('td', { text: 'issued by the delegator' }),
+      ])
+    );
+    let composedCount = 0;
+    const composedLabels: string[] = [];
+    for (const [from, via, to] of paths) {
+      const outcome = attemptComposition(lab, from, via, to);
+      if (outcome.works) {
+        composedCount++;
+        composedLabels.push(`${from}→${to}`);
+      }
+      rows.push(
+        el('tr', {}, [
+          el('td', { text: from }),
+          el('td', { text: to }),
+          el('td', { text: `${outcome.works ? 'COMPOSED by the proxy' : 'not composable'} — via ${via}: ${outcome.detail}` }),
+        ])
+      );
+    }
+
+    graphBox.appendChild(el('h4', { text: 'What the proxy can actually do' }));
+    graphBox.appendChild(
+      tableWrap(
+        'Delegations the proxy can perform, scrollable',
+        el('table', {}, [
+          el('caption', {
+            text: 'Every issued edge, plus every two-step path with the composition actually attempted.',
+          }),
+          el('thead', {}, [
+            el('tr', {}, [
+              el('th', { text: 'from' }),
+              el('th', { text: 'to' }),
+              el('th', { text: 'origin' }),
             ]),
-            el(
-              'tbody',
-              {},
-              closure.map(([f, t]) =>
-                el('tr', {}, [
-                  el('td', { text: f }),
-                  el('td', { text: t }),
-                  el('td', {
-                    text: live.some((e) => e.from === f && e.to === t)
-                      ? 'issued'
-                      : 'composed by the proxy',
-                  }),
-                ])
-              )
-            ),
-          ])
+          ]),
+          el('tbody', {}, rows),
+        ])
+      )
+    );
+
+    if (paths.length === 0) {
+      graphBox.appendChild(
+        el('p', {
+          class: 'hint',
+          text: 'No two-step path in this graph yet — install a second edge that starts where another ends.',
+        })
+      );
+    } else if (composedCount > 0) {
+      graphBox.appendChild(
+        verdict(
+          'alarm',
+          `${composedCount} delegation${composedCount === 1 ? '' : 's'} nobody issued`,
+          `(b/a)·(c/b) = c/a. The proxy multiplied the scalars it already holds and the result VERIFIES against the two public keys: ${composedLabels.join(', ')}. Alice agreed to Bob. Nobody agreed to this.`
         )
       );
-      if (extra.length > 0) {
-        graphBox.appendChild(
-          verdict(
-            'alarm',
-            `${extra.length} delegation${extra.length === 1 ? '' : 's'} nobody issued`,
-            `The proxy multiplies the scalars it already holds and gets a working key for a pair that never agreed to anything: ${extra.map(([f, t]) => `${f}→${t}`).join(', ')}. Under AFGH this composition is the computational Diffie-Hellman problem, and the closure equals the issued edges.`
-          )
-        );
-      }
-    } else if (lab.scheme === 'afgh' && live.length > 0) {
+    } else {
       graphBox.appendChild(
         verdict(
           'pass',
           'The graph the proxy can act on is exactly the graph it was given',
-          'AFGH re-encryption keys are points, and combining g2^(a1·b2) with g2^(b1·c2) to get g2^(a1·c2) is the computational Diffie-Hellman problem in G2. No composed edges appear.'
+          `${paths.length} two-step path${paths.length === 1 ? '' : 's'} attempted, none composable. A re-encryption key here is a point, and building g2^(a1·c2) from g2^(a1·b2) and g2^(b1·c2) is the computational Diffie-Hellman problem in G2 — the additions and scalings a proxy can perform were tried and none of them lands on the genuine key.`
         )
       );
     }
@@ -268,19 +290,58 @@ function linkPanel(l1: string, v1: string, l2: string, v2: string): HTMLElement 
   ]);
 }
 
-/** Warshall's algorithm on the issued edges. Small graph; clarity over speed. */
-function transitiveClosure(edges: [string, string][]): [string, string][] {
-  const nodes = Array.from(new Set(edges.flat()));
-  const reach = new Map<string, Set<string>>();
-  for (const n of nodes) reach.set(n, new Set());
-  for (const [f, t] of edges) reach.get(f)!.add(t);
-  for (const k of nodes) {
-    for (const i of nodes) {
-      if (!reach.get(i)!.has(k)) continue;
-      for (const j of reach.get(k)!) reach.get(i)!.add(j);
+/** Every from → via → to path in the issued graph, excluding the trivial ones. */
+function twoStepPaths(edges: [Actor, Actor][]): [Actor, Actor, Actor][] {
+  const out: [Actor, Actor, Actor][] = [];
+  for (const [a, b] of edges) {
+    for (const [c, d] of edges) {
+      if (b !== c || a === d) continue;
+      if (edges.some(([x, y]) => x === a && y === d)) continue; // already issued
+      out.push([a, b, d]);
     }
   }
-  const out: [string, string][] = [];
-  for (const i of nodes) for (const j of reach.get(i)!) out.push([i, j]);
   return out;
+}
+
+/**
+ * Attempt the composition the proxy would attempt, and report what happened.
+ *
+ * BBS98: multiply the two scalars and CHECK the result against the two public
+ * keys with `verifyReKey`, which needs nothing secret. If it verifies, the
+ * proxy holds a working delegation nobody issued.
+ *
+ * AFGH: the re-encryption key is a point, so the operations available are
+ * addition and scaling by a known scalar. Both are tried against the genuine
+ * rk(from → to). Neither lands on it, and the reason is that producing
+ * g2^(a1·c2) from g2^(a1·b2) and g2^(b1·c2) is CDH in G2.
+ */
+function attemptComposition(
+  lab: Lab,
+  from: Actor,
+  via: Actor,
+  to: Actor
+): { works: boolean; detail: string } {
+  if (lab.scheme === 'bbs98') {
+    const composed = bbs98.composeReKeys(
+      bbs98.rekeygen(lab.bbs(from), lab.bbs(via)),
+      bbs98.rekeygen(lab.bbs(via), lab.bbs(to))
+    );
+    if (!composed.ok) return { works: false, detail: composed.detail };
+    const works = bbs98.verifyReKey(composed.value);
+    return {
+      works,
+      detail: works
+        ? 'the product of two scalars, and it verifies against both public keys'
+        : 'the product does not verify',
+    };
+  }
+  const ab = afgh.rekeygen(lab.afgh(from), afgh.publicKey(lab.afgh(via)));
+  const bc = afgh.rekeygen(lab.afgh(via), afgh.publicKey(lab.afgh(to)));
+  const genuine = afgh.rekeygen(lab.afgh(from), afgh.publicKey(lab.afgh(to)));
+  const tried = [ab.value.add(bc.value), ab.value.subtract(bc.value), ab.value.double()];
+  const works = tried.some((p) => p.equals(genuine.value));
+  return {
+    works,
+    detail: works ? 'unexpected — please report' : 'adding, subtracting and doubling the two points all miss the genuine key (CDH in G2)',
+  };
 }

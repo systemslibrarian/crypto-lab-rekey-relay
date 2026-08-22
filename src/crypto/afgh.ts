@@ -1,5 +1,7 @@
 import {
   g1,
+  g1FromBytes,
+  g1ToBytes,
   g2,
   g2FromBytes,
   g2ToBytes,
@@ -13,6 +15,7 @@ import {
   randomGT,
   randomScalar,
   Z,
+  type G1Point,
   type G2Point,
   type GTElement,
 } from './group';
@@ -264,6 +267,22 @@ export function reencrypt(ct: AfghCiphertext, rk: AfghReKey): Outcome<AfghCipher
         'so there is no second transform to apply — the hop is a one-click ratchet.'
     );
   }
+  let alphaPoint: G1Point;
+  try {
+    // The ciphertext gets the SAME wire round-trip the re-encryption key gets,
+    // and for the same reason: a real proxy receives bytes. `g1FromBytes`
+    // rejects points off the curve AND points outside the order-r subgroup —
+    // BLS12-381 is not subgroup-secure, and pairing an off-subgroup point is
+    // the primitive a small-subgroup attack is built from. The identity is
+    // rejected separately because @noble will not pair it at all.
+    if (ct.alpha.is0()) throw new Error('alpha is the identity point');
+    alphaPoint = g1FromBytes(g1ToBytes(ct.alpha));
+  } catch (e) {
+    return fail(
+      'WRONG_LEVEL',
+      `this is not a well-formed level-2 ciphertext: ${(e as Error).message}`
+    );
+  }
   let rkPoint: G2Point;
   try {
     // A real proxy receives bytes. `g2FromBytes` rejects points off the curve
@@ -281,18 +300,10 @@ export function reencrypt(ct: AfghCiphertext, rk: AfghReKey): Outcome<AfghCipher
       `this ciphertext is addressed to ${ct.holder.label}; the installed key re-encrypts from ${rk.fromLabel}`
     );
   }
-  if (ct.alpha.is0()) {
-    // Same reasoning as in `decrypt`: `pair()` refuses the identity point, and
-    // a proxy that crashes on a malformed input is worse than one that refuses.
-    return fail(
-      'WRONG_LEVEL',
-      'alpha is the identity point, so this is not a well-formed level-2 ciphertext and there is nothing to pair'
-    );
-  }
   return ok({
     scheme: 'afgh',
     level: 1,
-    alpha: pair(ct.alpha, rkPoint),
+    alpha: pair(alphaPoint, rkPoint),
     beta: ct.beta,
     component: 2,
     holder: rk.to,

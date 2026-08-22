@@ -9,19 +9,19 @@ import type { Page } from '@playwright/test';
  * reach a `::before`/`::after` glyph, because a pseudo-element is not an
  * element and owns no text node.
  *
- * IN THIS LAB the control-boundary half is the live one. `src/style.css` has
- * the boundary token — `--control-border`, defined in both themes and applied
- * to `.mono-input`/`.msg-input` and, since the 1.4.11 pass that landed in
- * `9596c01`, to the base `.btn` — but tokens are discarded by overrides, and
- * that is what this oracle exists to measure rather than trust. Three shapes
- * on this page override or bypass it: `.btn-primary` repaints its border the
- * SAME colour as its own accent fill, so it has no edge of its own and lives
- * or dies by fill-vs-surround (which the gold accent does not clear on the
- * white light-theme surface); `.seg-btn` declares `border: none` and leans on
- * its `.seg` wrapper, whose border is the decorative `--border` divider; and
- * `.tab-btn.active` overrides to `--accent-ink`, the fix from that same
- * commit. This oracle judges each control as painted, at every driven state —
- * including the rejected-preset and `aria-invalid` recolourings only the
+ * IN THIS LAB the control-boundary half is the live one, and it has already
+ * earned its keep. `src/style.css` carries one boundary token,
+ * `--border-strong`, applied to the base `#app button`, to `.seg-btn`, to
+ * `.tab-btn`, to `textarea`, and to the `.journal` scroll region — but tokens
+ * are discarded by overrides, and measuring what is PAINTED rather than what
+ * is declared is the whole point. Its first full drive found four boundaries
+ * under 3:1 and every one was fixed rather than baselined: the shared bar's
+ * `.cl-btn` mixing the page accent into its only edge (2.38:1); the
+ * unselected `.seg-btn`, which had no border of its own and a fill identical
+ * to the card behind it (1.00:1); `--border-strong` itself, two steps too
+ * dark against `--surface-2` (2.73:1); and the `.tab-btn` row that inherited
+ * it. The oracle judges each control as painted, at every driven state,
+ * including the `.btn-danger` and `[aria-pressed]` recolourings only the
  * drive reaches.
  *
  * The generated-content half is inert in this repo today — the stylesheet
@@ -507,13 +507,14 @@ export async function auditNonText(page: Page, within = 'body *'): Promise<NonTe
       //
       // A side also has to be OPAQUE ENOUGH TO PAINT. `border: 1px solid
       // transparent` is a layout spacer, not a delineator — it reserves the
-      // 1px a coloured state will later occupy so nothing shifts. This page
-      // uses exactly that on `.tab-btn`, whose ACTIVE state fills the border
-      // in with `--accent-ink`; counting the transparent spacer as a border
-      // would make the five unselected tabs — no fill, no painted edge,
-      // identified by their text alone, exactly the case the "is it trying to
-      // draw itself as a control?" test below exists to exclude — report
-      // 1.00:1 apiece.
+      // 1px a coloured state will later occupy so nothing shifts. This
+      // stylesheet does not currently use that idiom: every control here
+      // declares an opaque `--border-strong` edge and the selected states
+      // repaint it to `--accent-strong` rather than filling in a transparent
+      // reservation. The guard stays because the idiom is one CSS edit away,
+      // and counting a transparent spacer as a border would make a control
+      // with no fill and no painted edge report a comfortable ratio it does
+      // not have.
       const SIDES = ['top', 'right', 'bottom', 'left'] as const;
       const paintedSides = SIDES.filter((side) => {
         if (parseFloat(cs.getPropertyValue(`border-${side}-width`) || '0') <= 0) return false;

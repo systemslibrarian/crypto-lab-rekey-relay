@@ -313,25 +313,32 @@ function rkFields(rk: AnyReKey): { name: string; bytes: Uint8Array }[] {
 }
 
 function ctFields(ct: AnyCiphertext): { name: string; bytes: Uint8Array }[] {
+  // Every field goes through `safeBytes`, for exactly the reason `rkFields`
+  // does: the journal is written BEFORE any validation, so it is handed the
+  // malformed inputs it exists to record. @noble refuses to encode the identity
+  // point and refuses to encode a point outside the order-r subgroup, and a
+  // journal that throws on those would take the refusal down with it — turning
+  // a named `Outcome` failure into an uncaught exception at the one boundary
+  // whose whole job is to fail closed.
   if (ct.scheme === 'bbs98') {
     return [
-      { name: 'c1 (message half, G1)', bytes: g1ToBytes(ct.c1) },
-      { name: 'c2 (key half, G1)', bytes: g1ToBytes(ct.c2) },
+      safeBytes('c1 (message half, G1)', () => g1ToBytes(ct.c1)),
+      safeBytes('c2 (key half, G1)', () => g1ToBytes(ct.c2)),
       { name: 'AES-GCM nonce', bytes: ct.payload.iv },
       { name: 'AES-GCM ciphertext+tag', bytes: ct.payload.ct },
     ];
   }
   if (ct.level === 2) {
     return [
-      { name: 'alpha = g1^k (level 2, G1)', bytes: g1ToBytes(ct.alpha) },
-      { name: 'beta (message half, GT)', bytes: gtToBytes(ct.beta) },
+      safeBytes('alpha = g1^k (level 2, G1)', () => g1ToBytes(ct.alpha)),
+      safeBytes('beta (message half, GT)', () => gtToBytes(ct.beta)),
       { name: 'AES-GCM nonce', bytes: ct.payload.iv },
       { name: 'AES-GCM ciphertext+tag', bytes: ct.payload.ct },
     ];
   }
   return [
-    { name: 'alpha (level 1, GT)', bytes: gtToBytes(ct.alpha) },
-    { name: 'beta (message half, GT)', bytes: gtToBytes(ct.beta) },
+    safeBytes('alpha (level 1, GT)', () => gtToBytes(ct.alpha)),
+    safeBytes('beta (message half, GT)', () => gtToBytes(ct.beta)),
     { name: 'AES-GCM nonce', bytes: ct.payload.iv },
     { name: 'AES-GCM ciphertext+tag', bytes: ct.payload.ct },
   ];

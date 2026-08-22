@@ -406,7 +406,25 @@ export function renderRelay(lab: Lab, host: HTMLElement): void {
         'So this page does what a deployment does. The scheme carries a random group element M, HKDF-SHA-256 turns M’s canonical encoding into a 256-bit key, and AES-256-GCM encrypts your actual text under it. Both halves are WebCrypto, so the RFC 5869 and GCM test vectors on the Vectors tab apply to exactly this code path.'
       ),
       p(
-        'The AEAD is bound with additional authenticated data to the one ciphertext component the proxy must never touch. If a re-encryption ever altered the message-carrying half, the tag would fail and the page would say so — the property is enforced by the cryptography rather than promised in a caption.'
+        'The AEAD is bound with additional authenticated data to the one ciphertext component the proxy must never touch, so tampering with it surfaces as an authentication failure rather than as a wrong plaintext. To be precise about how much that buys: in both of these schemes that component is also the one the key is derived from, so altering it would break decryption anyway. The binding is defence in depth, not the mechanism — and saying otherwise would be exactly the kind of claim this page is supposed to check rather than assert.'
+      )
+    )
+  );
+
+  host.appendChild(
+    details(
+      'How AFGH was moved onto an asymmetric pairing',
+      p(
+        'AFGH is written for a SYMMETRIC pairing, e: G × G → GT, where both arguments come from the same group. BLS12-381 is Type-3: e: G1 × G2 → GT, with no efficiently computable map between G1 and G2. So every element of the scheme has to be placed on one side or the other, and the placement is forced rather than chosen.'
+      ),
+      p(
+        'Three constraints settle it. First, re-encryption IS the pairing e(alpha, rk), so the level-2 ciphertext component and the re-encryption key must sit in OPPOSITE source groups. Second, the public key’s first component must live in GT rather than in a source group: publishing g2^a1 would publish the collusion weak key itself, and anyone holding the public key could then open every level-2 ciphertext — which is also why a1 and a2 have to be drawn independently. Third, efficiency breaks the remaining tie: alpha is emitted once per message and rk once per delegation, so alpha takes the cheaper 48-byte G1 and rk the 96-byte G2.'
+      ),
+      p(
+        'The mirror split — alpha in G2, rk in G1 — is algebraically just as valid; it costs 48 extra bytes on every ciphertext. Nothing about the exponents changes either way.'
+      ),
+      p(
+        'What this does NOT carry across for free is the security argument. AFGH prove their scheme under an extended decisional bilinear Diffie-Hellman assumption stated for the symmetric setting; the Type-3 analogues are the co-DBDH and SXDH family. The construction is faithful; the proof was written for a different pairing type, and that is worth saying out loud rather than glossing.'
       )
     )
   );

@@ -221,7 +221,7 @@ export function renderUndelegate(lab: Lab, host: HTMLElement): void {
           attempt === null ? 'pass' : 'alarm',
           attempt === null ? 'The stolen key is now worthless' : 'Still readable — unexpected',
           attempt === null
-            ? 'Alice generated a new key pair and re-encrypted her data under it. That is the only move that retires an already-issued capability, and it costs exactly what proxy re-encryption exists to avoid: touching every ciphertext. It also has to be done for every delegation she ever issued, not just the compromised one, because she cannot tell which rk leaked.'
+            ? 'Alice generated a new key pair and re-encrypted her data under it. Within the two schemes on this page that is the only move that retires an already-issued capability — the schemes named in the disclosure above build revocation in from the start, at the cost of a trusted beacon or an interactive rekeygen, and even then only forward. Rotation costs exactly what proxy re-encryption exists to avoid: touching every ciphertext. It also has to be done for every delegation she ever issued, not just the compromised one, because she cannot tell which rk leaked.'
             : 'Please report.'
         )
       );
@@ -239,7 +239,7 @@ export function renderUndelegate(lab: Lab, host: HTMLElement): void {
         attempt === null ? 'pass' : 'alarm',
         attempt === null ? 'The weak key is now worthless' : 'Still readable — unexpected',
         attempt === null
-          ? 'A fresh a1 means a fresh Z^a1, and the old g2^a1 pairs against nothing useful. Same conclusion as BBS98, same cost: every stored ciphertext has to be re-encrypted under the new key, and every delegation reissued.'
+          ? 'A fresh a1 means a fresh Z^a1, and the old g2^a1 pairs against nothing useful. Same conclusion as BBS98 and the same cost: within this construction, every stored ciphertext has to be re-encrypted under the new key and every delegation reissued.'
           : 'Please report.'
       )
     );

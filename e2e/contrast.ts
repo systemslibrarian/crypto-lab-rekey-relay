@@ -571,9 +571,10 @@ export async function auditContrast(
       // that was never laid down.
       //
       // This lab does NOT use the idiom today: it has no `.sr-only` class, and
-      // every `role="status"` live region here — the message byte count, the
-      // tamper output, the equation stage, the vectors summary — is a VISIBLE
-      // element whose ink this walk measures for real. The guard stays because
+      // every `role="status"` live region here — the Relay result, the
+      // Collusion result, the chain result, the graph result, the revocation
+      // result, the vectors table and the proxy panel's exposure summary — is
+      // a VISIBLE element whose ink this walk measures for real. The guard stays because
       // the day a visually-hidden announcer is added (the normal next step for
       // a lab like this), measuring it would report a fresh phantom ratio on
       // every scan. It is deliberately narrow: only a ZERO-AREA clip
@@ -627,21 +628,20 @@ export async function auditContrast(
      * carries CHARACTERS is measured for real — see `includeAriaHidden` and the
      * `[aria-hidden="true"]` call in `gate.ts`'s `scan()`.
      *
-     * Every `aria-hidden` element on this page is an icon span rendered by the
-     * UI helpers: the `.verdict-icon` on each verdict, the `.stage-icon` on
-     * each pipeline stage, and the leading ✓ / ✕ / ⚠ glyph inside each
-     * `.pill` and each preset button — plus the shared header's two SVG marks,
-     * which carry no text. Each glyph duplicates the words directly beside it,
-     * but each is painted in a SEMANTIC ink (`--ok-text`, `--bad-text`,
-     * `--alarm-text`) on a `color-mix()` tint, which is why `scan()` runs the
-     * whole `aria-hidden` set through this walk with the exemption lifted
-     * rather than arguing any of them is merely decorative.
+     * The `aria-hidden` set on this page was ENUMERATED rather than assumed,
+     * and it is small: the shared header's two SVG marks, which carry no text
+     * at all. Nothing this lab renders is hidden that way. Verdict state is
+     * deliberately carried by a short mono token (OK / ! / X / !!) that is
+     * part of the accessible name rather than a decorative glyph beside it,
+     * precisely so there is no exempt-but-painted text to argue about.
      *
-     * Nothing on this page hides a VALUE. No signature, key, challenge or
-     * verdict text is inside an `aria-hidden` subtree — which was checked
+     * Nothing on this page hides a VALUE. No key, ciphertext, recovered scalar
+     * or verdict text is inside an `aria-hidden` subtree — which was checked
      * rather than assumed, because that is the shared blind spot where both
      * oracles stop looking and it is the one place a live readout can hide
-     * from a whole accessibility gate.
+     * from a whole accessibility gate. `scan()` runs the whole `aria-hidden`
+     * set through this walk with the exemption lifted anyway, so the day one
+     * of those SVGs gains a `<text>` node it is measured rather than trusted.
      */
     const ariaHidden = (el: Element): boolean => {
       if (allowAriaHidden) return false;

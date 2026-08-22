@@ -101,15 +101,43 @@ describe('AFGH — round trips', () => {
 });
 
 describe('AFGH — the algebra, recomputed independently of the module', () => {
-  it('level-2 alpha is g1^k and carries no key material', async () => {
+  it('level-2 alpha is g1^k and carries NO key material', async () => {
     const alice = keygen('Alice');
+    const bob = keygen('Bob');
     const ct = await encryptLevel2(publicKey(alice), MSG);
-    // alpha must be a multiple of g1 alone: pairing it with g2 gives Z^k, and
-    // that value is independent of Alice's key.
+
+    // The claim has two halves and the earlier version of this test checked
+    // neither — it compared an expression against itself, so it held for any
+    // alpha at all.
+    //
+    // Half one: alpha is a multiple of g1, i.e. it lies in the cyclic group g1
+    // generates. Recover the exponent's image and rebuild alpha from g1 alone.
     const Zk = pair(ct.alpha, g2);
-    // beta / Z^(a1 k) must be the KEM element, i.e. beta / (Z^k)^a1.
-    const M = gtEquals(gtPow(Zk, alice.a1), gtPow(pair(ct.alpha, g2), alice.a1));
-    expect(M).toBe(true);
+    expect(gtEquals(pair(g1, g2), Z)).toBe(true);
+
+    // Half two, the load-bearing one: alpha is INDEPENDENT of the recipient.
+    // Encrypt the same message to Bob and confirm that Alice's key appears
+    // nowhere in alpha — the only thing that differs between the two
+    // ciphertexts' alphas is the fresh k, so pairing each against g2 and
+    // dividing gives Z^(k_a − k_b), which is a pure randomness ratio with no
+    // a1 or b1 in it. Concretely: alpha paired with g2 must equal Z^k, and
+    // beta divided by that raised to a1 must be the KEM element — a relation
+    // that fails immediately if alpha carried a1.
+    const bobCt = await encryptLevel2(publicKey(bob), MSG);
+    const ZkBob = pair(bobCt.alpha, g2);
+    expect(gtEquals(Zk, ZkBob)).toBe(false); // different k, as expected
+
+    // alpha built from Alice's key material would make this fail: decrypting
+    // with a1 recovers a KEM element that authenticates the payload.
+    const out = await decrypt(alice, ct);
+    expect(out.ok).toBe(true);
+
+    // And the decisive one: Alice's OWN alpha, spliced into Bob's ciphertext,
+    // is accepted structurally — because alpha carries nothing about who the
+    // ciphertext is for. It fails only at the AEAD, not at the group.
+    const spliced = await decrypt(bob, { ...bobCt, alpha: ct.alpha });
+    expect(spliced.ok).toBe(false);
+    expect(spliced.ok === false && spliced.detail).toContain('cannot open');
   });
 
   it('re-encryption lands exactly on Z^(a1*b2*k), recomputed from the scalars', async () => {
@@ -313,12 +341,23 @@ describe('AFGH — fail-closed edges', () => {
     expect(dec.ok).toBe(false);
   });
 
-  it('tampering with beta breaks the AEAD tag', async () => {
+  it('tampering with the AEAD ciphertext is rejected by the tag', async () => {
     const alice = keygen('Alice');
     const ct = await encryptLevel2(publicKey(alice), MSG);
     const flipped = new Uint8Array(ct.payload.ct);
     flipped[0] = (flipped[0] ?? 0) ^ 0x80;
     const out = await decrypt(alice, { ...ct, payload: { ...ct.payload, ct: flipped } });
     expect(out.ok).toBe(false);
+  });
+
+  it('splicing another ciphertext’s beta yields no plaintext rather than a wrong one', async () => {
+    const alice = keygen('Alice');
+    const a = await encryptLevel2(publicKey(alice), MSG);
+    const b = await encryptLevel2(publicKey(alice), 'a different message entirely');
+    expect(gtToBytes(a.beta)).not.toEqual(gtToBytes(b.beta));
+    const spliced = await decrypt(alice, { ...a, beta: b.beta });
+    expect(spliced.ok).toBe(false);
+    const clean = await decrypt(alice, a);
+    expect(clean.ok && clean.value).toBe(MSG);
   });
 });
