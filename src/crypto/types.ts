@@ -79,6 +79,7 @@ export interface Bbs98Ciphertext {
   readonly c1: G1Point;
   readonly c2: G1Point;
   readonly holder: G1Point;
+  readonly holderLabel: string;
   readonly payload: SealedPayload;
   /** How many proxy transforms this ciphertext has been through. */
   readonly hops: number;

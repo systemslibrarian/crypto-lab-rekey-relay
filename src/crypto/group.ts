@@ -140,6 +140,34 @@ export function gtToBytes(x: GTElement): Uint8Array {
 }
 
 /**
+ * Is this Fp12 element actually in GT?
+ *
+ * `Fp12.fromBytes` validates NOTHING — unlike `G1.Point.fromBytes` and
+ * `G2.Point.fromBytes`, which check both curve membership and the order-r
+ * subgroup. And BLS12-381 is not subgroup-secure: the cofactors of all three
+ * groups contain prime factors smaller than r (GT's is divisible by 4513), so
+ * small-subgroup attacks on GT are a live concern rather than a theoretical
+ * one. Every place this lab raises a value it RECEIVED to a secret exponent —
+ * a delegatee opening a level-1 ciphertext the proxy handed him is exactly
+ * that shape — has to check first.
+ *
+ * The test is complete, not heuristic: Fp12* is the multiplicative group of a
+ * finite field and therefore cyclic, so { x : x^r = 1 } is exactly the unique
+ * order-r subgroup, which is GT. It costs one 255-bit Fp12 exponentiation.
+ */
+export function isInGT(x: GTElement): boolean {
+  return Fp12.eql(Fp12.pow(x, ORDER), Fp12.ONE);
+}
+
+/** Parse a GT element from the wire, rejecting anything outside the subgroup. */
+export function gtFromBytes(b: Uint8Array): GTElement {
+  if (b.length !== GT_BYTES) throw new RangeError(`expected ${GT_BYTES} bytes, got ${b.length}`);
+  const x = Fp12.fromBytes(b) as GTElement;
+  if (!isInGT(x)) throw new RangeError('element is not in the order-r subgroup GT');
+  return x;
+}
+
+/**
  * Parse a compressed G1 point, rejecting anything off-curve or outside the
  * order-r subgroup. @noble/curves runs both checks in `fromBytes`; this
  * wrapper exists so the failure reaches the UI as a named cause rather than as

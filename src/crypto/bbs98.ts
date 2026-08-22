@@ -62,7 +62,7 @@ export function keypairFromScalar(label: string, sk: bigint): Bbs98KeyPair {
  * than as a wrong plaintext.
  */
 export async function encrypt(
-  target: Bbs98KeyPair | { pk: G1Point },
+  target: Bbs98KeyPair | { pk: G1Point; label?: string },
   plaintext: string
 ): Promise<Bbs98Ciphertext> {
   const k = randomScalar();
@@ -72,7 +72,15 @@ export async function encrypt(
   const c2 = target.pk.multiply(k);
   const dek = await deriveDek(g1ToBytes(M), 'bbs98');
   const payload = await seal(dek, utf8.encode(plaintext), g1ToBytes(c1));
-  return { scheme: 'bbs98', c1, c2, holder: target.pk, payload, hops: 0 };
+  return {
+    scheme: 'bbs98',
+    c1,
+    c2,
+    holder: target.pk,
+    holderLabel: 'label' in target && target.label ? target.label : 'an unnamed key',
+    payload,
+    hops: 0,
+  };
 }
 
 /**
@@ -131,6 +139,28 @@ export function invertReKey(rk: Bbs98ReKey): Bbs98ReKey {
 }
 
 /**
+ * Check a re-encryption key against the two PUBLIC keys it claims to join.
+ *
+ *   [rk] pk_A  ==  pk_B     because  [b/a]([a]g) = [b]g
+ *
+ * BBS98's re-encryption key is publicly verifiable — anyone, including the
+ * proxy, can confirm it is genuine using nothing secret. AFGH's is NOT: to
+ * check g2^(a1 b2) you would need either b2 (secret) or g1^a1, and g1^a1 is
+ * the collusion weak key, so it cannot be published.
+ *
+ * That inversion is worth sitting with. The scheme that surrenders the
+ * delegator's private key on collusion is the one whose delegation key you can
+ * audit; the scheme that protects it hands the proxy a 96-byte value it cannot
+ * distinguish from a random point. It is why `RK_MISMATCH` means something
+ * different in each scheme: a cryptographic check in BBS98, and pure
+ * bookkeeping in AFGH.
+ */
+export function verifyReKey(rk: Bbs98ReKey): boolean {
+  if (!isValidScalar(rk.value)) return false;
+  return rk.from.multiply(rk.value).equals(rk.to);
+}
+
+/**
  * Compose two delegations into a third, with nobody's permission.
  *
  *   rk_{A->B} * rk_{B->C} = (b/a)(c/b) = c/a = rk_{A->C}
@@ -182,13 +212,14 @@ export function reencrypt(ct: Bbs98Ciphertext, rk: Bbs98ReKey): Outcome<Bbs98Cip
   if (!ct.holder.equals(rk.from)) {
     return fail(
       'RK_MISMATCH',
-      `ciphertext is addressed to ${shortPk(ct.holder)}, this key re-encrypts from ${shortPk(rk.from)} (${rk.fromLabel})`
+      `this ciphertext is addressed to ${ct.holderLabel} (${shortPk(ct.holder)}); the installed key re-encrypts from ${rk.fromLabel} (${shortPk(rk.from)})`
     );
   }
   return ok({
     ...ct,
     c2: ct.c2.multiply(rk.value),
     holder: rk.to,
+    holderLabel: rk.toLabel,
     hops: ct.hops + 1,
   });
 }

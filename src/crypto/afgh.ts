@@ -4,6 +4,7 @@ import {
   g2FromBytes,
   g2ToBytes,
   gtDiv,
+  gtFromBytes,
   gtMul,
   gtPow,
   gtToBytes,
@@ -43,9 +44,10 @@ import {
  * the target group. BLS12-381 is Type-3 — e: G1 x G2 -> GT with no efficient
  * isomorphism — so the two source-group roles have to be split across G1 and
  * G2. The split is forced, not chosen: ReEncrypt pairs the level-2 ciphertext's
- * first component with the re-encryption key, so one of those is in G1 and the
- * other in G2, and the public key follows the re-encryption key. Full note in
- * `docs/THREAT-MODEL.md`.
+ * first component with the re-encryption key, so one of those has to be in G1
+ * and the other in G2, and the public key follows the re-encryption key. The
+ * page states the adaptation in the Scheme Card disclosure; the README's "What
+ * Can Go Wrong" records what it does and does not preserve.
  *
  * With g1 in G1, g2 in G2 and Z = e(g1, g2) in GT:
  *
@@ -159,6 +161,19 @@ export async function decrypt(
         'The two alphas are not even in the same group.'
     );
   }
+  // Level-1 alpha is the one value here that a delegatee raises to his OWN
+  // SECRET after receiving it from the proxy. That is precisely the shape a
+  // small-subgroup attack exploits, and BLS12-381 is not subgroup-secure, so
+  // the element is re-parsed from its wire encoding — which checks order-r
+  // membership — before any secret touches it. `Fp12.fromBytes` alone does
+  // NOT check that; see `group.ts`.
+  if (ct.level === 1) {
+    try {
+      gtFromBytes(gtToBytes(ct.alpha));
+    } catch (e) {
+      return fail('WRONG_LEVEL', `alpha failed GT subgroup validation: ${(e as Error).message}`);
+    }
+  }
   const M =
     ct.level === 2
       ? gtDiv(ct.beta, gtPow(pair(ct.alpha, g2), kp.a1))
@@ -187,6 +202,35 @@ export function rekeygen(from: AfghKeyPair, to: AfghPublicKey): AfghReKey {
 }
 
 export const isBidirectional = false;
+
+/**
+ * A re-encryption key here is NOT publicly verifiable, and that is structural.
+ *
+ * Checking rk = g2^(a1 b2) would need either b2, which is Bob's secret, or
+ * g1^a1 — and g1^a1 is precisely the collusion weak key, so publishing it would
+ * hand every level-2 ciphertext to the world. Neither is available, so a proxy
+ * holding a 96-byte G2 point cannot tell a genuine rk from a random one.
+ *
+ * Consequence for this lab's failure codes: `RK_MISMATCH` under AFGH is
+ * bookkeeping — the proxy is comparing labels, not verifying mathematics. Under
+ * BBS98 the same code IS a cryptographic check (`bbs98.verifyReKey`). The
+ * scheme that leaks the private key is the one whose delegation key you can
+ * audit.
+ */
+export const reKeyIsPubliclyVerifiable = false;
+
+/**
+ * Self-delegation leaks Alice's own weak key.
+ *
+ * rk_{A->A} = g2^(a1 a2), and Alice knows a2, so anyone holding both recovers
+ * g2^a1 — the same value a full Bob-and-proxy collusion produces, with only one
+ * party involved. It is a legal call, so this lab does not block it; it names
+ * it, because "delegate to yourself" is the kind of convenience a deployment
+ * adds without thinking.
+ */
+export function isSelfDelegation(rk: AfghReKey): boolean {
+  return rk.fromLabel === rk.toLabel;
+}
 
 /**
  * The proxy's transform.
