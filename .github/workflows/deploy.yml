@@ -102,9 +102,11 @@ jobs:
             sleep 15          # a sibling pull request merging first moves main under us
           done
           [ -n "$merged" ] || { echo "::warning::gate passed, merge did not land"; exit 0; }
-          # GitHub suppresses push events for merges made with GITHUB_TOKEN, so
-          # deploy.yml's `on: push` never fires. A workflow_dispatch through the
-          # API is not suppressed.
+          # A merge made with GITHUB_TOKEN raises no push event -- GitHub suppresses
+          # them so workflows cannot retrigger themselves -- so deploy would never run
+          # and the site would keep serving the previous build. Ask for it explicitly;
+          # a workflow_dispatch through the API is not suppressed. The dispatched run
+          # is the same gate-then-deploy pipeline, so a bad merge still ships nothing.
           gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
