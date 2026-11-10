@@ -96,6 +96,7 @@ jobs:
         uses: dependabot/fetch-metadata@v3
 
       - name: Merge any bump whose gate went green, then dispatch the deploy
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
         run: |
           for attempt in 1 2 3; do
             gh pr merge --squash --delete-branch "$PR_URL" && merged=1 && break
