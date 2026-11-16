@@ -341,7 +341,7 @@ export function renderCollusion(lab: Lab, host: HTMLElement): void {
       callout(
         'caveat',
         el('strong', { text: 'And the part that matters outside this page: ' }),
-        'a1 is also Alice’s signing key if she uses this key pair for signatures. AFGH make that argument explicitly — because Schnorr and ElGamal signatures are proofs of knowledge of the discrete log, master-secret security means a user "may be able to safely delegate decryption rights without delegating signing rights for the same public key." Under BBS98 she loses both at once.'
+        'a1 is also Alice’s signing key if she uses this key pair for signatures. AFGH make that argument explicitly — because Schnorr and ElGamal signatures are proofs of knowledge of the discrete log, master-secret security means a user "may be able to safely delegate decryption rights … without delegating signing rights for the same public key". Under BBS98 she loses both at once.'
       )
     );
   }
