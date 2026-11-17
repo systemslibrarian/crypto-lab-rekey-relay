@@ -664,7 +664,10 @@ test('the negative claim about revocation is scoped, and names alternatives', as
 
   const d = page.locator('#panel-undelegate details').first();
   await d.locator('summary').click();
-  await expect(d).toContainText('section 3.6');
+  // ePrint 2005/028 numbers the temporary unidirectional scheme 3.2 ("3.2 Temporary Unidirectional Proxy Re-encryption"); it has no section 3.6,
+  // and the paper itself cites "the 'Third Attempt' ... from Section 3.1".
+  await expect(d).toContainText('ePrint 2005/028 section 3.2');
+  await expect(d).not.toContainText('section 3.6');
   await expect(d).toContainText('Weng');
   await expect(d).toContainText('Tang');
   await expect(d).toContainText('Liu, Wang and Wu');

@@ -26,7 +26,7 @@ import type { Lab } from './lab';
  * all, because the residue they hold works offline.
  *
  * That claim has to be SCOPED, because stated flatly it is refutable by the
- * AFGH paper itself. Their section 3.6 gives a temporary unidirectional scheme
+ * AFGH paper itself. Their section 3.2 gives a temporary unidirectional scheme
  * with a genuine cryptographic revocation: a trusted server broadcasts a fresh
  * random h_i each period, every rk is pinned to that period's h_i, and
  * advancing the period invalidates every outstanding delegation at once — "A
@@ -86,7 +86,7 @@ export function renderUndelegate(lab: Lab, host: HTMLElement): void {
       'Schemes that DO address revocation, and what each one really does',
       el('h4', { text: 'Cryptographic revocation, forward-only' }),
       p(
-        'Ateniese, Fu, Green and Hohenberger, "Improved Proxy Re-encryption Schemes with Applications to Secure Distributed Storage", section 3.6 — the temporary unidirectional scheme in the same paper as the construction on this page. A trusted server broadcasts a fresh random h_i for each time period; every re-encryption key is pinned to its period, so advancing the period invalidates all outstanding delegations at once. The costs are a trusted beacon, an interactive rekeygen, and the fact that a stale key still re-encrypts anything encrypted DURING its period.'
+        'Ateniese, Fu, Green and Hohenberger, "Improved Proxy Re-encryption Schemes with Applications to Secure Distributed Storage", ePrint 2005/028 section 3.2 "Temporary Unidirectional Proxy Re-encryption" — the temporary unidirectional scheme in the same paper as the construction on this page. A trusted server broadcasts a fresh random h_i for each time period; every re-encryption key is pinned to its period, so advancing the period invalidates all outstanding delegations at once. The costs are a trusted beacon, an interactive rekeygen, and the fact that a stale key still re-encrypts anything encrypted DURING its period.'
       ),
       p(
         'Liu, Wang and Wu, "Time-based proxy re-encryption scheme for secure data sharing in a cloud environment", Information Sciences 258:355–370, 2014 — attaches a time tree to a CP-ABE/PRE hybrid so attributes carry eligible periods.'
