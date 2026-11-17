@@ -124,7 +124,7 @@ Proxy re-encryption's flagship application is the one AFGH built: **encrypted di
 
 It has never become ubiquitous, and the reasons are visible on this page: the collusion story is subtle, the delegation graph leaks, the revocation story is bad, and the single-hop constructions with the best security properties are exactly the ones that cannot chain. Where a system can tolerate a key server that *does* see plaintext, or can afford to re-encrypt on write, the simpler design usually wins.
 
-The pairing library here, `@noble/curves`, is the same audited implementation used in production Ethereum and post-quantum tooling. The BLS12-381 curve is the one used for Ethereum's consensus signatures, Zcash's Sapling circuits, and drand's randomness beacon.
+The pairing library here, `@noble/curves`, is the same implementation used in production Ethereum and post-quantum tooling. Its latest independent audit is "at version 2.3.0, in Aug 2026, by [Trail of Bits]" with scope "everything"; this lab pins `^2.4.0`, one release past that, so the version shipped here is not itself covered. The BLS12-381 curve is the one used for Ethereum's consensus signatures, Zcash's Sapling circuits, and drand's randomness beacon.
 
 ---
 
